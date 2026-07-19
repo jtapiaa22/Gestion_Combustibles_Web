@@ -2,36 +2,57 @@
 //  api.js — Capa de datos única (antes duplicada en tres lugares:
 //  la app móvil, database/db.js y los 36 handlers IPC de Electron).
 //
-//  Donde las dos implementaciones diferían, quedó la correcta. Cada
-//  una de esas decisiones está marcada con un comentario ELEGIDO.
+//  Escrita contra el esquema nuevo, donde lo derivado se calcula en
+//  vistas y no se guarda. Eso hace desaparecer clases enteras de
+//  código que antes existían sólo para mantener números en sincronía:
+//
+//    · No se ajusta la deuda del cliente: sale de sus fiados.
+//    · No se escribe `total`: es litros × precio, columna generada.
+//    · No se marca `pagado`: se deduce de los pagos registrados.
+//
+//  Se LEE de las vistas v_ventas / v_clientes (traen lo calculado).
+//  Se ESCRIBE en las tablas base.
 // ══════════════════════════════════════════════════════════════
-import { supabase } from './supabase';
-import { ahora, arAUTC, inicioDelDia, finDelDia } from './fechas';
+import { supabase } from './supabase.js';
+import { ahora, inicioDelDia, finDelDia } from './fechas.js';
 
-// `pagado` es boolean nativo. La app de PC lo normalizaba a 0/1 para
-// su UI; eso se va, y la UI compara contra booleans.
-const conNombreCliente = (filas) =>
-  (filas || []).map(({ clientes, ...v }) => ({
-    ...v,
-    cliente_nombre: clientes?.nombre || null,
-  }));
+const num = (v) => Number(v) || 0;
 
 const alzar = ({ data, error }) => {
   if (error) throw error;
   return data;
 };
 
+/** Los numeric de Postgres pueden llegar como string; normalizamos. */
+const venta = (v) =>
+  v && {
+    ...v,
+    cantidad_litros: num(v.cantidad_litros),
+    precio_por_litro: num(v.precio_por_litro),
+    total: num(v.total),
+    cobrado: num(v.cobrado),
+    saldo: num(v.saldo),
+  };
+
+const ventas = (arr) => (arr || []).map(venta);
+
 // ── STOCK ───────────────────────────────────────────────────
 export const stockAPI = {
-  obtenerTodo: async () =>
-    alzar(await supabase.from('stock').select('*').order('tipo_combustible')),
+  obtenerTodo: async () => {
+    const data = alzar(await supabase.from('stock').select('*').order('tipo_combustible'));
+    return data.map((s) => ({
+      ...s,
+      cantidad_litros: num(s.cantidad_litros),
+      precio_por_litro: num(s.precio_por_litro),
+    }));
+  },
 
   obtenerPorTipo: async (tipo) =>
     alzar(await supabase.from('stock').select('*').eq('tipo_combustible', tipo).single()),
 
-  // TODO: esto es un read-modify-write. Con un solo usuario no hay
-  // problema, pero lo correcto es una función RPC que incremente en
-  // el servidor de forma atómica. Anotado para la etapa de esquema.
+  // TODO: read-modify-write. Con un solo usuario no hay problema,
+  // pero lo correcto sería una función RPC que incremente del lado
+  // del servidor de forma atómica.
   actualizarCantidad: async (tipo, delta) => {
     const actual = alzar(
       await supabase.from('stock').select('cantidad_litros').eq('tipo_combustible', tipo).single()
@@ -40,7 +61,7 @@ export const stockAPI = {
       await supabase
         .from('stock')
         .update({
-          cantidad_litros: (actual?.cantidad_litros || 0) + delta,
+          cantidad_litros: num(actual?.cantidad_litros) + delta,
           ultima_actualizacion: ahora(),
         })
         .eq('tipo_combustible', tipo)
@@ -49,9 +70,13 @@ export const stockAPI = {
   },
 
   /**
-   * Cambiar el precio revalúa las deudas vivas: un fiado está
-   * denominado en litros, no en pesos. Si sube la nafta, el que debe
-   * 20 litros pasa a deber más plata.
+   * Un fiado está denominado en litros, no en pesos: si sube el
+   * surtidor, sube lo que debe el que se llevó fiado.
+   *
+   * Antes esto era un loop que reescribía cuatro campos por venta y
+   * además ajustaba la deuda del cliente — y era justo donde se
+   * colaban los descuadres. Ahora alcanza con cambiar el precio: el
+   * total es generado y el saldo se recalcula solo.
    */
   actualizarPrecio: async (tipo, precio) => {
     const actualizado = alzar(
@@ -62,312 +87,346 @@ export const stockAPI = {
         .select()
     );
 
-    const fiados = alzar(
-      await supabase.from('ventas').select('*').eq('tipo_combustible', tipo).eq('pagado', false)
-    );
-
-    for (const fiado of fiados || []) {
-      const nuevoOriginal = fiado.cantidad_litros * precio;
-      const yaPagado = (fiado.total_original || 0) - fiado.total;
-      const nuevoTotal = Math.max(0, nuevoOriginal - yaPagado);
-      const diferencia = nuevoTotal - fiado.total;
-
+    // Apunta a los fiados SIN FECHA DE SALDADO, no a los que hoy dan
+    // saldo positivo. Si el precio se cargó mal y dejó a alguno en
+    // cero, al corregirlo vuelve a entrar acá y recupera su deuda.
+    const abiertos = alzar(
       await supabase
         .from('ventas')
-        .update({
-          precio_por_litro: precio,
-          total_original: nuevoOriginal,
-          total: nuevoTotal,
-          pagado: nuevoTotal <= 0,
-        })
-        .eq('id', fiado.id);
+        .select('id')
+        .eq('tipo_combustible', tipo)
+        .eq('es_fiado', true)
+        .is('saldado_en', null)
+    );
 
-      if (fiado.cliente_id && Math.abs(diferencia) > 0.001) {
-        await clientesAPI._ajustarDeuda(fiado.cliente_id, diferencia);
-      }
+    if (abiertos?.length) {
+      alzar(
+        await supabase
+          .from('ventas')
+          .update({ precio_por_litro: precio })
+          .in('id', abiertos.map((v) => v.id))
+          .select('id')
+      );
     }
 
-    return actualizado;
+    return { stock: actualizado, fiadosRevaluados: abiertos?.length || 0 };
   },
 };
 
 // ── CLIENTES ────────────────────────────────────────────────
 export const clientesAPI = {
-  // ELEGIDO: la versión del móvil. La de PC hacía una query por
-  // cliente (N+1); con 57 clientes eran 58 viajes a la base.
+  // Una sola query: la vista ya trae deuda, fiados abiertos e
+  // histórico. Antes esto eran 58 viajes a la base (uno por cliente).
   obtenerTodos: async () => {
-    const clientes = alzar(await supabase.from('clientes').select('*').order('nombre'));
-    const ventas = alzar(
-      await supabase.from('ventas').select('id, cliente_id, pagado, total, total_original')
-    );
+    const data = alzar(await supabase.from('v_clientes').select('*').order('nombre'));
+    return data.map((c) => ({
+      ...c,
+      debe: num(c.debe),
+      fiados_abiertos: num(c.fiados_abiertos),
+      total_compras: num(c.total_compras),
+      total_pagado: num(c.total_pagado),
+    }));
+  },
 
-    return clientes.map((c) => {
-      const suyas = (ventas || []).filter((v) => v.cliente_id === c.id);
-      return {
-        ...c,
-        total_compras: suyas.length,
-        total_pagado: suyas.filter((v) => v.pagado).reduce((s, v) => s + (v.total_original || 0), 0),
-        // Deuda derivada de las ventas impagas. La columna `debe`
-        // sigue existiendo por ahora, pero esta es la fuente de
-        // verdad: es la que no se puede desincronizar.
-        deuda_real: suyas.filter((v) => !v.pagado).reduce((s, v) => s + (v.total || 0), 0),
-      };
-    });
+  obtenerUno: async (id) => {
+    const c = alzar(await supabase.from('v_clientes').select('*').eq('id', id).single());
+    return { ...c, debe: num(c.debe), fiados_abiertos: num(c.fiados_abiertos) };
   },
 
   agregar: async (nombre, telefono, direccion) => {
-    const data = alzar(
-      await supabase
-        .from('clientes')
-        .insert({ nombre: nombre.trim(), telefono: telefono || null, direccion: direccion || null })
-        .select()
-        .single()
-    );
-    return { id: data.id, lastInsertRowid: data.id, ...data };
+    const { data, error } = await supabase
+      .from('clientes')
+      .insert({
+        nombre: (nombre || '').trim(),
+        telefono: telefono?.trim() || null,
+        direccion: direccion?.trim() || null,
+      })
+      .select()
+      .single();
+
+    // El índice único es case-insensitive: atrapa "Pablo mansilla"
+    // contra "Pablo Mansilla ", que en la base vieja convivían.
+    if (error?.code === '23505') {
+      throw new Error(`Ya existe un cliente con el nombre "${nombre.trim()}"`);
+    }
+    if (error) throw error;
+    return data;
+  },
+
+  editar: async (id, { nombre, telefono, direccion }) => {
+    const { error } = await supabase
+      .from('clientes')
+      .update({
+        nombre: (nombre || '').trim(),
+        telefono: telefono?.trim() || null,
+        direccion: direccion?.trim() || null,
+      })
+      .eq('id', id);
+    if (error?.code === '23505') throw new Error(`Ya existe otro cliente con ese nombre`);
+    if (error) throw error;
   },
 
   buscar: async (nombre) =>
-    alzar(await supabase.from('clientes').select('*').ilike('nombre', `%${nombre}%`).order('nombre')),
+    alzar(await supabase.from('v_clientes').select('*').ilike('nombre', `%${nombre}%`).order('nombre')),
 
   obtenerHistorial: async (clienteId) =>
+    ventas(
+      alzar(
+        await supabase.from('v_ventas').select('*').eq('cliente_id', clienteId).order('fecha', { ascending: false })
+      )
+    ),
+
+  obtenerPagos: async (clienteId) =>
     alzar(
-      await supabase.from('ventas').select('*').eq('cliente_id', clienteId).order('fecha', { ascending: false })
+      await supabase.from('pagos_fiado').select('*').eq('cliente_id', clienteId).order('fecha', { ascending: false })
     ),
 
   eliminar: async (clienteId) => {
-    // Borrar un cliente con deuda viva le hace desaparecer plata de
-    // los libros sin dejar rastro. Que la UI avise antes.
-    const impagas = alzar(
-      await supabase.from('ventas').select('id, total').eq('cliente_id', clienteId).eq('pagado', false)
-    );
-    const deuda = (impagas || []).reduce((s, v) => s + (v.total || 0), 0);
-    if (deuda > 0.5) {
-      throw new Error(`Este cliente todavía debe $${Math.round(deuda).toLocaleString('es-AR')}. Saldá la deuda antes de borrarlo.`);
+    const { error } = await supabase.from('clientes').delete().eq('id', clienteId);
+    // La FK es ON DELETE RESTRICT: un cliente con ventas registradas
+    // no se puede borrar, porque se llevaría los registros con él.
+    if (error?.code === '23503') {
+      throw new Error('Este cliente tiene ventas registradas y no se puede borrar sin perder esos registros.');
     }
-
-    await supabase.from('pagos_fiado').delete().eq('cliente_id', clienteId);
-    await supabase.from('ventas').delete().eq('cliente_id', clienteId);
-    alzar(await supabase.from('clientes').delete().eq('id', clienteId));
-  },
-
-  /** Uso interno. `debe` es un contador incremental y por eso derivó
-   *  $32.400 en producción. Está para irse en la etapa de esquema. */
-  _ajustarDeuda: async (clienteId, delta) => {
-    if (!clienteId || !delta) return;
-    const cl = alzar(await supabase.from('clientes').select('debe').eq('id', clienteId).single());
-    await supabase
-      .from('clientes')
-      .update({ debe: Math.max(0, (cl?.debe || 0) + delta) })
-      .eq('id', clienteId);
+    if (error) throw error;
   },
 };
 
 // ── VENTAS ──────────────────────────────────────────────────
 export const ventasAPI = {
+  /**
+   * Una venta al contado lleva método de pago. Un fiado no: se define
+   * recién cuando se cobra, y puede cobrarse en varias veces y con
+   * métodos distintos. Por eso el método vive en cada pago.
+   */
   registrar: async ({
     clienteId, tipoCombustible, cantidadLitros, precioPorLitro,
-    total, metodoPago, pagado, titularTransferencia,
+    esFiado, metodoPago, titularTransferencia,
   }) => {
-    const venta = alzar(
+    if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
+    if (!esFiado && !metodoPago) throw new Error('Indicá cómo se cobró la venta');
+
+    const nueva = alzar(
       await supabase
         .from('ventas')
         .insert({
+          fecha: ahora(),
           cliente_id: clienteId || null,
           tipo_combustible: tipoCombustible,
           cantidad_litros: cantidadLitros,
           precio_por_litro: precioPorLitro,
-          total,
-          total_original: total,
-          metodo_pago: metodoPago,
-          titular_transferencia: titularTransferencia || null,
-          pagado: !!pagado,
-          fecha: ahora(), // UTC real, no la hora local disfrazada de antes
+          es_fiado: !!esFiado,
+          metodo_pago: esFiado ? null : metodoPago,
+          titular_transferencia: metodoPago === 'Transferencia' ? titularTransferencia || null : null,
         })
         .select()
         .single()
     );
 
     await stockAPI.actualizarCantidad(tipoCombustible, -cantidadLitros);
-    if (!pagado && clienteId) await clientesAPI._ajustarDeuda(clienteId, total);
-
-    return { ...venta, lastInsertRowid: venta.id };
+    return venta(nueva);
   },
 
   obtenerTodas: async () =>
-    conNombreCliente(
-      alzar(await supabase.from('ventas').select('*, clientes(nombre)').order('fecha', { ascending: false }))
-    ),
+    ventas(alzar(await supabase.from('v_ventas').select('*').order('fecha', { ascending: false }))),
 
-  obtenerPorFecha: async (inicio, fin) =>
-    conNombreCliente(
+  obtenerPorFecha: async (desde, hasta) =>
+    ventas(
       alzar(
         await supabase
-          .from('ventas')
-          .select('*, clientes(nombre)')
-          .gte('fecha', inicioDelDia(inicio))
-          .lte('fecha', finDelDia(fin))
+          .from('v_ventas')
+          .select('*')
+          .gte('fecha', inicioDelDia(desde))
+          .lte('fecha', finDelDia(hasta))
           .order('fecha', { ascending: false })
       )
     ),
 
   obtenerPendientes: async () =>
-    conNombreCliente(
+    ventas(
       alzar(
         await supabase
-          .from('ventas')
-          .select('*, clientes(nombre)')
+          .from('v_ventas')
+          .select('*')
+          .eq('es_fiado', true)
           .eq('pagado', false)
           .order('fecha', { ascending: false })
       )
     ),
 
-  // ELEGIDO: la versión de PC. La del móvil sumaba `total`, que para
-  // un fiado ya cobrado vale 0 — o sea que se comía toda la
-  // facturación de fiados del total histórico.
+  obtenerUna: async (id) => venta(alzar(await supabase.from('v_ventas').select('*').eq('id', id).single())),
+
+  /** Facturación histórica: todo lo vendido que ya está cobrado. */
   obtenerTotal: async () => {
-    const data = alzar(await supabase.from('ventas').select('total_original').eq('pagado', true));
-    return { total: data.reduce((s, v) => s + (v.total_original || 0), 0) };
+    const data = alzar(await supabase.from('v_ventas').select('total').eq('pagado', true));
+    return { total: data.reduce((s, v) => s + num(v.total), 0) };
   },
 
+  /**
+   * Totales por método de pago. Combina dos fuentes, porque en el
+   * esquema nuevo el método de una venta al contado está en la venta,
+   * y el de un fiado está en cada pago. Antes se pisaba el método de
+   * la venta al cobrarla y se perdía cómo se había vendido.
+   */
   obtenerTotalesPorMetodo: async () => {
-    const data = alzar(
-      await supabase.from('ventas').select('metodo_pago, total_original').eq('pagado', true)
-    );
-    const porMetodo = {};
-    for (const v of data) {
-      porMetodo[v.metodo_pago] ??= { metodo_pago: v.metodo_pago, total: 0, cantidad: 0 };
-      porMetodo[v.metodo_pago].total += v.total_original || 0;
-      porMetodo[v.metodo_pago].cantidad++;
+    const [alContado, pagos] = await Promise.all([
+      supabase.from('ventas').select('metodo_pago, total').eq('es_fiado', false),
+      supabase.from('pagos_fiado').select('metodo_pago, monto'),
+    ]);
+
+    const acc = {};
+    const sumar = (metodo, monto) => {
+      acc[metodo] ??= { metodo_pago: metodo, total: 0, cantidad: 0 };
+      acc[metodo].total += num(monto);
+      acc[metodo].cantidad++;
+    };
+
+    alzar(alContado).forEach((v) => sumar(v.metodo_pago, v.total));
+    alzar(pagos).forEach((p) => sumar(p.metodo_pago, p.monto));
+    return Object.values(acc);
+  },
+
+  /**
+   * Registrar un cobro. El saldo se recalcula solo a partir de los
+   * pagos; lo único que se escribe en la venta es la fecha de saldado
+   * cuando este pago la termina de cubrir.
+   */
+  registrarPago: async (ventaId, montoPagado, metodoPago, titularTransferencia) => {
+    const v = await ventasAPI.obtenerUna(ventaId);
+    if (!v) throw new Error('Venta no encontrada');
+    if (!v.es_fiado) throw new Error('Esta venta no es un fiado');
+    if (montoPagado <= 0) throw new Error('El monto tiene que ser mayor a cero');
+    if (montoPagado > v.saldo + 0.01) {
+      throw new Error(`El monto supera la deuda de esta venta (${v.saldo.toFixed(2)})`);
     }
-    return Object.values(porMetodo);
-  },
 
-  // ELEGIDO: la versión de PC, que valida. La del móvil dejaba pagar
-  // más que la deuda: la venta quedaba en 0 pero al cliente se le
-  // descontaba el monto entero, y la diferencia se evaporaba.
-  registrarPagoParcial: async (ventaId, clienteId, montoPagado, metodoPago, titularTransferencia) => {
-    const venta = alzar(await supabase.from('ventas').select('*').eq('id', ventaId).single());
-    if (!venta) throw new Error('Venta no encontrada');
-    if (montoPagado > venta.total + 0.001) {
-      throw new Error('El monto supera la deuda restante de esta venta');
-    }
-
-    const nuevoTotal = Math.max(0, venta.total - montoPagado);
-    const saldado = nuevoTotal <= 0.001;
-
-    await supabase.from('pagos_fiado').insert({
-      venta_id: ventaId, cliente_id: clienteId, monto: montoPagado,
-      metodo_pago: metodoPago, titular_transferencia: titularTransferencia || null,
-      fecha: ahora(),
-    });
-
-    await supabase
-      .from('ventas')
-      .update({ total: nuevoTotal, pagado: saldado, metodo_pago: saldado ? metodoPago : venta.metodo_pago })
-      .eq('id', ventaId);
-
-    await clientesAPI._ajustarDeuda(clienteId, -montoPagado);
-    return { saldado, totalRestante: nuevoTotal };
-  },
-
-  // ELEGIDO: la de PC, que lee el pendiente real de la base. La del
-  // móvil confiaba en el total que le mandaba la pantalla, que podía
-  // estar desactualizado si alguien había cobrado algo en el medio.
-  marcarPagada: async (ventaId, clienteId, _total, metodoPago, titularTransferencia) => {
-    const venta = alzar(await supabase.from('ventas').select('*').eq('id', ventaId).single());
-    if (!venta) throw new Error('Venta no encontrada');
-    const pendiente = venta.total;
-
-    await supabase.from('ventas').update({ pagado: true, total: 0, metodo_pago: metodoPago }).eq('id', ventaId);
-
-    await supabase.from('pagos_fiado').insert({
-      venta_id: ventaId, cliente_id: clienteId, monto: pendiente,
-      metodo_pago: metodoPago, titular_transferencia: titularTransferencia || null,
-      fecha: ahora(),
-    });
-
-    await clientesAPI._ajustarDeuda(clienteId, -pendiente);
-    return { ok: true, montoAplicado: pendiente };
-  },
-
-  /** Salda la deuda del cliente de la más vieja a la más nueva. */
-  pagarDeudaCliente: async (clienteId, montoPagado, metodoPago, titularTransferencia) => {
-    const fiados = alzar(
+    alzar(
       await supabase
-        .from('ventas')
-        .select('*')
-        .eq('cliente_id', clienteId)
-        .eq('pagado', false)
-        .order('fecha', { ascending: true })
+        .from('pagos_fiado')
+        .insert({
+          venta_id: ventaId,
+          cliente_id: v.cliente_id,
+          monto: montoPagado,
+          metodo_pago: metodoPago,
+          titular_transferencia: metodoPago === 'Transferencia' ? titularTransferencia || null : null,
+          fecha: ahora(),
+        })
+        .select()
+        .single()
     );
-    if (!fiados?.length) throw new Error('El cliente no tiene deudas pendientes');
 
-    const fechaPago = ahora();
+    const restante = v.saldo - montoPagado;
+    const saldado = restante <= 0.01;
+
+    // Queda registrado CUÁNDO se terminó de pagar. A partir de acá el
+    // fiado no se revalúa aunque cambie el precio: ya está cerrado.
+    if (saldado) {
+      alzar(
+        await supabase.from('ventas').update({ saldado_en: ahora() }).eq('id', ventaId).select('id')
+      );
+    }
+
+    return { saldado, totalRestante: Math.max(0, restante) };
+  },
+
+  /** Cobrar el saldo completo de un fiado. */
+  saldarVenta: async (ventaId, metodoPago, titularTransferencia) => {
+    const v = await ventasAPI.obtenerUna(ventaId);
+    if (!v) throw new Error('Venta no encontrada');
+    if (v.saldo <= 0.01) throw new Error('Esta venta ya está saldada');
+    return ventasAPI.registrarPago(ventaId, v.saldo, metodoPago, titularTransferencia);
+  },
+
+  /** Salda la deuda del cliente, del fiado más viejo al más nuevo. */
+  pagarDeudaCliente: async (clienteId, montoPagado, metodoPago, titularTransferencia) => {
+    const fiados = ventas(
+      alzar(
+        await supabase
+          .from('v_ventas')
+          .select('*')
+          .eq('cliente_id', clienteId)
+          .eq('es_fiado', true)
+          .eq('pagado', false)
+          .order('fecha', { ascending: true })
+      )
+    );
+    if (!fiados.length) throw new Error('El cliente no tiene deudas pendientes');
+
+    const fecha = ahora();
+    const aInsertar = [];
     let restante = montoPagado;
     const saldadas = [];
     const parciales = [];
 
-    for (const fiado of fiados) {
-      if (restante <= 0.001) break;
-      const aplicado = Math.min(restante, fiado.total);
-      const nuevoTotal = fiado.total - aplicado;
-      const saldado = nuevoTotal <= 0.001;
-
-      await supabase.from('pagos_fiado').insert({
-        venta_id: fiado.id, cliente_id: clienteId, monto: aplicado,
-        metodo_pago: metodoPago, titular_transferencia: titularTransferencia || null,
-        fecha: fechaPago,
+    for (const f of fiados) {
+      if (restante <= 0.01) break;
+      const aplicado = Math.min(restante, f.saldo);
+      aInsertar.push({
+        venta_id: f.id,
+        cliente_id: clienteId,
+        monto: aplicado,
+        metodo_pago: metodoPago,
+        titular_transferencia: metodoPago === 'Transferencia' ? titularTransferencia || null : null,
+        fecha,
       });
-
-      await supabase
-        .from('ventas')
-        .update({ total: saldado ? 0 : nuevoTotal, pagado: saldado, metodo_pago: saldado ? metodoPago : fiado.metodo_pago })
-        .eq('id', fiado.id);
-
-      (saldado ? saldadas : parciales).push(fiado.id);
+      (aplicado >= f.saldo - 0.01 ? saldadas : parciales).push(f.id);
       restante -= aplicado;
     }
 
-    const aplicadoTotal = montoPagado - restante;
-    await clientesAPI._ajustarDeuda(clienteId, -aplicadoTotal);
+    alzar(await supabase.from('pagos_fiado').insert(aInsertar).select('id'));
+
+    if (saldadas.length) {
+      alzar(
+        await supabase.from('ventas').update({ saldado_en: fecha }).in('id', saldadas).select('id')
+      );
+    }
 
     return {
-      montoAplicado: aplicadoTotal,
+      montoAplicado: montoPagado - restante,
       ventasSaldadas: saldadas,
       ventasParciales: parciales,
-      // Si pagó de más, la UI tiene que avisarlo en vez de tragárselo.
-      sobrante: restante > 0.001 ? restante : 0,
+      // Si pagó de más, que la UI lo diga en vez de tragárselo.
+      sobrante: restante > 0.01 ? restante : 0,
     };
   },
 
   obtenerPagosFiado: async (ventaId) =>
     alzar(await supabase.from('pagos_fiado').select('*').eq('venta_id', ventaId).order('fecha', { ascending: false })),
 
-  // ELEGIDO: la de PC. La del móvil sólo hacía UPDATE de la fila —
-  // no devolvía litros al tanque ni corregía la deuda. Editar una
-  // venta desde el teléfono descuadraba el stock para siempre.
+  /**
+   * Editar sólo ajusta el stock. La deuda ya no hay que tocarla: al
+   * cambiar litros o precio, el total se regenera y el saldo se
+   * recalcula. Este era el bug más dañino de la app móvil, que
+   * editaba la fila sin devolver los litros al tanque.
+   */
   editar: async (ventaId, datos) => {
-    const anterior = alzar(await supabase.from('ventas').select('*').eq('id', ventaId).single());
+    const anterior = await ventasAPI.obtenerUna(ventaId);
     if (!anterior) throw new Error('Venta no encontrada');
 
-    const { tipoCombustible, cantidadLitros, precioPorLitro, metodoPago, clienteId, pagado } = datos;
-    const total = cantidadLitros * precioPorLitro;
+    const { tipoCombustible, cantidadLitros, precioPorLitro, metodoPago, clienteId, esFiado, titularTransferencia } = datos;
+
+    if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
+    if (!esFiado && !metodoPago) throw new Error('Indicá cómo se cobró la venta');
+    if (anterior.es_fiado && !esFiado && anterior.cobrado > 0.01) {
+      throw new Error('Esta venta ya tiene pagos registrados. Borrá los pagos antes de convertirla en venta al contado.');
+    }
+    if (esFiado && cantidadLitros * precioPorLitro < anterior.cobrado - 0.01) {
+      throw new Error('El nuevo total quedaría por debajo de lo ya cobrado en esta venta.');
+    }
 
     // Stock: devolver lo viejo, descontar lo nuevo
     if (tipoCombustible !== anterior.tipo_combustible) {
       await stockAPI.actualizarCantidad(anterior.tipo_combustible, anterior.cantidad_litros);
       await stockAPI.actualizarCantidad(tipoCombustible, -cantidadLitros);
-    } else {
+    } else if (cantidadLitros !== anterior.cantidad_litros) {
       await stockAPI.actualizarCantidad(tipoCombustible, anterior.cantidad_litros - cantidadLitros);
     }
 
-    // Deuda: revertir la anterior, aplicar la nueva
-    if (!anterior.pagado && anterior.cliente_id) {
-      await clientesAPI._ajustarDeuda(anterior.cliente_id, -anterior.total);
-    }
-    if (!pagado && clienteId) {
-      await clientesAPI._ajustarDeuda(clienteId, total);
-    }
+    // Si la corrección hace que el fiado valga más de lo ya cobrado,
+    // vuelve a estar abierto: el cliente pasa a deber la diferencia.
+    // Y una venta al contado nunca lleva fecha de saldado.
+    const nuevoTotal = cantidadLitros * precioPorLitro;
+    const saldadoEn = !esFiado || nuevoTotal > anterior.cobrado + 0.01 ? null : anterior.saldado_en;
 
     alzar(
       await supabase
@@ -377,28 +436,23 @@ export const ventasAPI = {
           tipo_combustible: tipoCombustible,
           cantidad_litros: cantidadLitros,
           precio_por_litro: precioPorLitro,
-          total,
-          total_original: total,
-          metodo_pago: metodoPago,
-          pagado: !!pagado,
+          es_fiado: !!esFiado,
+          metodo_pago: esFiado ? null : metodoPago,
+          titular_transferencia: metodoPago === 'Transferencia' ? titularTransferencia || null : null,
+          saldado_en: saldadoEn,
         })
         .eq('id', ventaId)
+        .select('id')
     );
   },
 
-  // ELEGIDO: la de PC, por lo mismo que `editar`. Borrar desde el
-  // teléfono no devolvía los litros ni bajaba la deuda.
+  /** Devuelve los litros al tanque. Los pagos se van en cascada. */
   eliminar: async (ventaId) => {
-    const venta = alzar(await supabase.from('ventas').select('*').eq('id', ventaId).single());
-    if (!venta) throw new Error('Venta no encontrada');
+    const v = await ventasAPI.obtenerUna(ventaId);
+    if (!v) throw new Error('Venta no encontrada');
 
-    await stockAPI.actualizarCantidad(venta.tipo_combustible, venta.cantidad_litros);
-    if (!venta.pagado && venta.cliente_id) {
-      await clientesAPI._ajustarDeuda(venta.cliente_id, -venta.total);
-    }
-
-    await supabase.from('pagos_fiado').delete().eq('venta_id', ventaId);
-    alzar(await supabase.from('ventas').delete().eq('id', ventaId));
+    await stockAPI.actualizarCantidad(v.tipo_combustible, v.cantidad_litros);
+    alzar(await supabase.from('ventas').delete().eq('id', ventaId).select('id'));
   },
 };
 
@@ -409,11 +463,10 @@ export const comprasAPI = {
       await supabase
         .from('compras_stock')
         .insert({
+          fecha: ahora(),
           tipo_combustible: tipo,
           cantidad_litros: cantidad,
           precio_por_litro_compra: precioCompra,
-          total_compra: cantidad * precioCompra,
-          fecha: ahora(),
         })
         .select()
         .single()
@@ -427,7 +480,7 @@ export const comprasAPI = {
 
   obtenerTotalInvertido: async () => {
     const data = alzar(await supabase.from('compras_stock').select('total_compra'));
-    return { total: data.reduce((s, c) => s + (c.total_compra || 0), 0) };
+    return { total: data.reduce((s, c) => s + num(c.total_compra), 0) };
   },
 };
 
@@ -441,101 +494,89 @@ const costoPorLitro = async (tipo) => {
       .order('fecha', { ascending: false })
       .limit(1)
   );
-  return data?.[0]?.precio_por_litro_compra || 0;
+  return num(data?.[0]?.precio_por_litro_compra);
 };
 
 // ── CAJA ────────────────────────────────────────────────────
 
 /**
- * Los totales de una sesión, calculados una sola vez.
- * Antes esta misma cuenta estaba copiada en tres funciones distintas
- * y las tres se habían ido separando entre sí.
+ * Totales de un período. Antes esta misma cuenta estaba copiada en
+ * tres funciones y las tres se habían ido separando entre sí.
  */
-async function calcularTotales(desdeUTC, hastaUTC) {
+async function calcularTotales(desde, hasta) {
   const [ventasRaw, pagosRaw, costoNafta, costoGasoil] = await Promise.all([
-    supabase.from('ventas').select('*, clientes(nombre)').gte('fecha', desdeUTC).lte('fecha', hastaUTC).order('fecha', { ascending: false }),
-    supabase.from('pagos_fiado').select('*, clientes(nombre)').gte('fecha', desdeUTC).lte('fecha', hastaUTC).order('fecha', { ascending: false }),
+    supabase.from('v_ventas').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
+    supabase.from('pagos_fiado').select('*, clientes(nombre)').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
     costoPorLitro('Nafta'),
     costoPorLitro('Gasoil'),
   ]);
 
-  const ventas = conNombreCliente(alzar(ventasRaw));
-  const pagosFiado = conNombreCliente(alzar(pagosRaw));
+  const lista = ventas(alzar(ventasRaw));
+  const pagosFiado = alzar(pagosRaw).map(({ clientes, ...p }) => ({
+    ...p,
+    monto: num(p.monto),
+    cliente_nombre: clientes?.nombre || null,
+  }));
 
-  const pagadas = ventas.filter((v) => v.pagado);
-  const fiadas = ventas.filter((v) => !v.pagado);
-  const montoDe = (v) => v.total_original || v.total || 0;
-  const sumar = (arr, f) => arr.reduce((s, x) => s + (f(x) || 0), 0);
+  const alContado = lista.filter((v) => !v.es_fiado);
+  const fiadas = lista.filter((v) => v.es_fiado);
+  const sumar = (arr, f) => arr.reduce((s, x) => s + num(f(x)), 0);
 
-  const totalEfectivo = sumar(pagadas.filter((v) => v.metodo_pago === 'Efectivo'), montoDe);
-  const totalTransferencia = sumar(pagadas.filter((v) => v.metodo_pago === 'Transferencia'), montoDe);
+  const totalEfectivo = sumar(alContado.filter((v) => v.metodo_pago === 'Efectivo'), (v) => v.total);
+  const totalTransferencia = sumar(alContado.filter((v) => v.metodo_pago === 'Transferencia'), (v) => v.total);
   const totalCobrado = totalEfectivo + totalTransferencia;
 
-  const costoVendido = sumar(pagadas, (v) =>
-    (v.cantidad_litros || 0) * (v.tipo_combustible === 'Nafta' ? costoNafta : costoGasoil)
+  // El costo se cuenta sobre lo vendido al contado, igual que antes.
+  // Un fiado cobrado hoy pero vendido en otro turno no suma costo
+  // acá: su mercadería salió del tanque el día de la venta.
+  const costoVendido = sumar(alContado, (v) =>
+    v.cantidad_litros * (v.tipo_combustible === 'Nafta' ? costoNafta : costoGasoil)
   );
 
   return {
-    ventas,
+    ventas: lista,
     pagosFiado,
     totalEfectivo,
     totalTransferencia,
     totalCobrado,
-    totalFiadoNuevo: sumar(fiadas, montoDe),
+    totalFiadoNuevo: sumar(fiadas, (v) => v.total),
     totalFiadoCobrado: sumar(pagosFiado, (p) => p.monto),
-    litrosNafta: sumar(ventas.filter((v) => v.tipo_combustible === 'Nafta'), (v) => v.cantidad_litros),
-    litrosGasoil: sumar(ventas.filter((v) => v.tipo_combustible === 'Gasoil'), (v) => v.cantidad_litros),
+    litrosNafta: sumar(lista.filter((v) => v.tipo_combustible === 'Nafta'), (v) => v.cantidad_litros),
+    litrosGasoil: sumar(lista.filter((v) => v.tipo_combustible === 'Gasoil'), (v) => v.cantidad_litros),
     ganancia: totalCobrado - costoVendido,
-    cantidadVentas: ventas.length,
+    cantidadVentas: lista.length,
     cantidadFiados: fiadas.length,
   };
 }
 
-/**
- * Los límites de la sesión se guardan como fecha + hora locales por
- * separado. Acá se convierten a UTC — y esta conversión es justo la
- * que estaba rota en la app de PC: le aplicaba el offset al límite
- * pero no a las ventas, así que las ventanas nunca coincidían.
- */
-const limitesDe = (sesion) => ({
-  desde: arAUTC(sesion.fecha_apertura, sesion.hora_apertura, '00'),
-  hasta: sesion.fecha_cierre ? arAUTC(sesion.fecha_cierre, sesion.hora_cierre, '59') : ahora(),
-});
-
 export const cajaAPI = {
-  abrirCaja: async (fecha, hora, notas) => {
-    const abierta = alzar(
-      await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle()
-    );
-    if (abierta) throw new Error('Ya hay una caja abierta');
-
-    const data = alzar(
-      await supabase
-        .from('sesiones_caja')
-        .insert({ fecha_apertura: fecha, hora_apertura: hora, notas_apertura: notas || null, estado: 'abierta' })
-        .select()
-        .single()
-    );
-    return { id: data.id };
+  /** Una sola caja abierta a la vez: lo garantiza un índice único. */
+  abrirCaja: async (notas) => {
+    const { data, error } = await supabase
+      .from('sesiones_caja')
+      .insert({ abierta_en: ahora(), notas_apertura: notas || null })
+      .select()
+      .single();
+    if (error?.code === '23505') throw new Error('Ya hay una caja abierta');
+    if (error) throw error;
+    return data;
   },
 
-  cerrarCaja: async (id, fechaCierre, horaCierre, notasCierre) => {
+  cerrarCaja: async (id, notas) => {
     const sesion = alzar(
-      await supabase.from('sesiones_caja').select('*').eq('id', id).eq('estado', 'abierta').maybeSingle()
+      await supabase.from('sesiones_caja').select('*').eq('id', id).is('cerrada_en', null).maybeSingle()
     );
     if (!sesion) throw new Error('No se encontró la sesión o ya está cerrada');
 
-    const { desde } = limitesDe(sesion);
-    const hasta = arAUTC(fechaCierre, horaCierre, '59');
-    const t = await calcularTotales(desde, hasta);
+    const cerradaEn = ahora();
+    const t = await calcularTotales(sesion.abierta_en, cerradaEn);
 
     alzar(
       await supabase
         .from('sesiones_caja')
         .update({
-          fecha_cierre: fechaCierre,
-          hora_cierre: horaCierre,
-          notas_cierre: notasCierre || null,
+          cerrada_en: cerradaEn,
+          notas_cierre: notas || null,
           total_efectivo: t.totalEfectivo,
           total_transferencia: t.totalTransferencia,
           total_fiado_nuevo: t.totalFiadoNuevo,
@@ -546,10 +587,11 @@ export const cajaAPI = {
           cantidad_ventas: t.cantidadVentas,
           cantidad_ventas_fiado: t.cantidadFiados,
           ganancia: t.ganancia,
-          estado: 'cerrada',
         })
         .eq('id', id)
+        .select('id')
     );
+
     return { ok: true, ...t };
   },
 
@@ -558,26 +600,23 @@ export const cajaAPI = {
       await supabase
         .from('sesiones_caja')
         .select('*')
-        .eq('estado', 'abierta')
-        .order('id', { ascending: false })
+        .is('cerrada_en', null)
+        .order('abierta_en', { ascending: false })
         .limit(1)
         .maybeSingle()
     ),
 
-  obtenerResumenActual: async (idSesion) => {
+  /**
+   * Los límites de la sesión ya son instantes: no hay nada que
+   * convertir. Armar ese instante a partir de fecha y hora sueltas
+   * era exactamente lo que la app de PC hacía mal.
+   */
+  obtenerResumen: async (idSesion) => {
     const sesion = alzar(await supabase.from('sesiones_caja').select('*').eq('id', idSesion).maybeSingle());
     if (!sesion) return null;
-    const { desde, hasta } = limitesDe(sesion);
-    return { sesion, ...(await calcularTotales(desde, hasta)) };
-  },
-
-  obtenerDetalle: async (id) => {
-    const sesion = alzar(await supabase.from('sesiones_caja').select('*').eq('id', id).maybeSingle());
-    if (!sesion) return null;
-    const { desde, hasta } = limitesDe(sesion);
-    return { sesion, ...(await calcularTotales(desde, hasta)) };
+    return { sesion, ...(await calcularTotales(sesion.abierta_en, sesion.cerrada_en || ahora())) };
   },
 
   obtenerHistorial: async () =>
-    alzar(await supabase.from('sesiones_caja').select('*').order('id', { ascending: false })),
+    alzar(await supabase.from('sesiones_caja').select('*').order('abierta_en', { ascending: false })),
 };

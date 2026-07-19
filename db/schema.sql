@@ -48,20 +48,27 @@ create table ventas (
   -- sigue solo. En una venta cobrada el precio queda congelado.
   total                  numeric(14,2) generated always as (cantidad_litros * precio_por_litro) stored,
 
-  -- es_fiado es un hecho inmutable de la venta. Si está pagada o no
-  -- se deduce de los pagos: ver la vista v_ventas.
+  -- es_fiado es un hecho inmutable de la venta.
   es_fiado               boolean not null default false,
   metodo_pago            text check (metodo_pago in ('Efectivo', 'Transferencia')),
   titular_transferencia  text,
 
+  -- Saldar es un evento con fecha, no el resultado de una cuenta.
+  -- Si se dedujera del saldo, un precio mal cargado podría dar por
+  -- saldado un fiado que no lo está, y al corregir el precio ya no
+  -- se revaluaría: la deuda se perdería en silencio.
+  saldado_en             timestamptz,
+
   -- Un fiado sin cliente es plata que nadie debe. Que no exista.
   constraint fiado_necesita_cliente check (not es_fiado or cliente_id is not null),
   -- Una venta cobrada tiene que decir cómo se cobró.
-  constraint cobrada_necesita_metodo check (es_fiado or metodo_pago is not null)
+  constraint cobrada_necesita_metodo check (es_fiado or metodo_pago is not null),
+  -- Sólo un fiado puede estar saldado.
+  constraint solo_fiados_se_saldan check (saldado_en is null or es_fiado)
 );
-create index ventas_fecha_idx      on ventas (fecha desc);
-create index ventas_cliente_idx    on ventas (cliente_id) where cliente_id is not null;
-create index ventas_fiado_idx      on ventas (es_fiado) where es_fiado;
+create index ventas_fecha_idx   on ventas (fecha desc);
+create index ventas_cliente_idx on ventas (cliente_id) where cliente_id is not null;
+create index ventas_fiados_abiertos_idx on ventas (tipo_combustible) where es_fiado and saldado_en is null;
 
 -- ── PAGOS DE FIADO ────────────────────────────────────────────
 -- Fuente de verdad de cuánto se cobró. Un fiado puede pagarse en
@@ -132,12 +139,16 @@ select
   v.*,
   c.nombre as cliente_nombre,
   coalesce(p.cobrado, 0) as cobrado,
-  case when v.es_fiado
+  -- Un fiado saldado no tiene saldo. Uno abierto debe lo que vale
+  -- hoy menos lo ya cobrado; si el precio quedó por debajo de lo
+  -- cobrado, da cero pero sigue abierto y se recupera al corregirlo.
+  case when v.es_fiado and v.saldado_en is null
        then greatest(0, v.total - coalesce(p.cobrado, 0))
        else 0
   end as saldo,
+  -- Pagado es un hecho, no una cuenta.
   case when v.es_fiado
-       then coalesce(p.cobrado, 0) >= v.total - 0.01
+       then v.saldado_en is not null
        else true
   end as pagado
 from ventas v

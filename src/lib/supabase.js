@@ -1,7 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// En el navegador las variables llegan por import.meta.env (Vite).
+// En node (tests, scripts) por process.env. Soportar las dos permite
+// probar esta misma capa de datos fuera del browser.
+const entorno =
+  (typeof import.meta !== 'undefined' && import.meta.env) ||
+  (typeof process !== 'undefined' && process.env) ||
+  {};
+
+const url = entorno.VITE_SUPABASE_URL;
+const key = entorno.VITE_SUPABASE_ANON_KEY;
 
 if (!url || !key) {
   throw new Error(
