@@ -31,6 +31,7 @@ export function Reportes() {
   const [hasta, setHasta] = useState(R.mes.hasta);
 
   const [ventas, setVentas] = useState([]);
+  const [pagos, setPagos] = useState([]);
   const [compras, setCompras] = useState([]);
   const [combustibles, setCombustibles] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -43,13 +44,15 @@ export function Reportes() {
   const cargar = async (d = desde, h = hasta) => {
     setCargando(true);
     try {
-      const [vs, cps, cbs, cls] = await Promise.all([
+      const [vs, pgs, cps, cbs, cls] = await Promise.all([
         d && h ? ventasAPI.obtenerPorFecha(d, h) : ventasAPI.obtenerTodas(),
+        ventasAPI.obtenerPagosPorFecha(d, h),
         comprasAPI.obtenerTodas(),
         combustiblesAPI.obtenerTodos({ incluirInactivos: true }),
         clientesAPI.obtenerTodos(),
       ]);
       setVentas(vs);
+      setPagos(pgs);
       setCompras(cps);
       setCombustibles(cbs);
       setClientes(cls);
@@ -86,15 +89,17 @@ export function Reportes() {
     }
 
     return {
-      efectivo: suma(alContado.filter((v) => v.metodo_pago === 'Efectivo'), (v) => v.total),
-      transferencia: suma(alContado.filter((v) => v.metodo_pago === 'Transferencia'), (v) => v.total),
+      // Una venta puede haberse pagado con los dos métodos a la vez,
+      // así que el desglose sale de los pagos y no de la venta.
+      efectivo: suma(pagos.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto),
+      transferencia: suma(pagos.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto),
       fiado: suma(fiadas, (v) => v.total),
       sinCobrar: suma(fiadas.filter((v) => !v.pagado), (v) => v.saldo),
       cantidad: ventas.length,
       cantidadFiadas: fiadas.length,
       porCombustible: Object.entries(porCombustible).sort((a, b) => b[1].monto - a[1].monto),
     };
-  }, [ventas]);
+  }, [ventas, pagos]);
 
   const cobrado = t.efectivo + t.transferencia;
 
@@ -232,7 +237,7 @@ export function Reportes() {
                       <td>{v.cantidad_litros.toFixed(2)} L</td>
                       <td><strong>{formatearMonto(v.total)}</strong></td>
                       <td>
-                        {!v.es_fiado ? v.metodo_pago
+                        {!v.es_fiado ? v.metodos_pago
                           : v.pagado ? <span className="badge" style={{ backgroundColor: 'var(--blue)' }}>Saldado</span>
                           : <span className="badge" style={{ backgroundColor: 'var(--accent-dark)' }}>debe {formatearMonto(v.saldo)}</span>}
                       </td>
@@ -270,7 +275,7 @@ export function Reportes() {
                       className="badge"
                       style={{ flexShrink: 0, backgroundColor: !v.es_fiado ? 'var(--success)' : v.pagado ? 'var(--blue)' : 'var(--accent-dark)' }}
                     >
-                      {!v.es_fiado ? v.metodo_pago : v.pagado ? 'Saldado' : 'Fiado'}
+                      {!v.es_fiado ? v.metodos_pago : v.pagado ? 'Saldado' : 'Fiado'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
@@ -355,14 +360,22 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
 
   useEffect(() => {
     if (!venta) { setForm(null); return; }
-    setForm({
-      combustibleId: venta.combustible_id,
-      litros: String(venta.cantidad_litros),
-      precio: String(venta.precio_por_litro),
-      esFiado: venta.es_fiado,
-      metodoPago: venta.metodo_pago || 'Efectivo',
-      clienteId: venta.cliente_id || null,
-      titular: venta.titular_transferencia || '',
+    // Los cobros de la venta definen como se pago; para un contado
+    // pueden ser uno o dos (efectivo + transferencia).
+    ventasAPI.obtenerPagosFiado(venta.id).then((pgs) => {
+      const ef = pgs.find((p) => p.metodo_pago === 'Efectivo');
+      const tr = pgs.find((p) => p.metodo_pago === 'Transferencia');
+      setForm({
+        combustibleId: venta.combustible_id,
+        litros: String(venta.cantidad_litros),
+        precio: String(venta.precio_por_litro),
+        esFiado: venta.es_fiado,
+        metodoPago: !venta.es_fiado && tr && !ef ? 'Transferencia' : 'Efectivo',
+        dividido: !venta.es_fiado && !!ef && !!tr,
+        montoEfectivo: ef ? String(Number(ef.monto)) : '',
+        clienteId: venta.cliente_id || null,
+        titular: tr?.titular_transferencia || '',
+      });
     });
   }, [venta]);
 
@@ -371,6 +384,8 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
   const litros = parseFloat(form.litros) || 0;
   const precio = parseFloat(form.precio) || 0;
   const nuevoTotal = litros * precio;
+  const efectivoEditado = parseFloat(form.montoEfectivo) || 0;
+  const restoEditado = nuevoTotal - efectivoEditado;
 
   const problema =
     litros <= 0 ? 'Los litros tienen que ser mayores a cero'
@@ -379,21 +394,33 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
     : form.esFiado && nuevoTotal < venta.cobrado - 0.01
       ? `Ya pagó ${formatearMonto(venta.cobrado)}: el total no puede quedar por debajo`
     : !form.esFiado && venta.es_fiado && venta.cobrado > 0.01
-      ? 'Esta venta ya tiene pagos registrados. No se puede pasar a contado.'
+      ? 'Este fiado ya tiene cobros registrados. No se puede pasar a contado.'
+    : !form.esFiado && form.dividido && efectivoEditado <= 0
+      ? 'Poné cuánto pagó en efectivo'
+    : !form.esFiado && form.dividido && restoEditado < 0.01
+      ? 'El efectivo no puede cubrir todo el total: elegí un solo medio de pago'
     : null;
 
   const guardar = async () => {
     if (problema) return;
     setGuardando(true);
     try {
+      const pagosNuevos = form.esFiado
+        ? []
+        : form.dividido
+          ? [
+              { metodo: 'Efectivo', monto: efectivoEditado },
+              { metodo: 'Transferencia', monto: nuevoTotal - efectivoEditado, titular: form.titular },
+            ]
+          : [{ metodo: form.metodoPago, monto: nuevoTotal, titular: form.titular }];
+
       await ventasAPI.editar(venta.id, {
         combustibleId: form.combustibleId,
         cantidadLitros: litros,
         precioPorLitro: precio,
         esFiado: form.esFiado,
-        metodoPago: form.esFiado ? null : form.metodoPago,
         clienteId: form.esFiado ? form.clienteId : null,
-        titularTransferencia: form.metodoPago === 'Transferencia' ? form.titular : null,
+        pagos: pagosNuevos,
       });
       onListo('Venta actualizada');
     } catch (e) {
@@ -470,6 +497,8 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
                     esFiado: c === 'Fiado',
                     metodoPago: c === 'Fiado' ? form.metodoPago : c,
                     clienteId: c === 'Fiado' ? form.clienteId : null,
+                    dividido: false,
+                    montoEfectivo: '',
                   })
                 }
               >
@@ -478,7 +507,52 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
             );
           })}
         </div>
+
+        {!form.esFiado && (
+          <button
+            onClick={() => setForm({ ...form, dividido: !form.dividido, montoEfectivo: '' })}
+            style={{
+              marginTop: 8, background: 'transparent', padding: 0,
+              color: form.dividido ? 'var(--accent)' : 'var(--text-secondary)',
+              fontSize: '0.8125rem', fontWeight: 600, textDecoration: 'underline',
+            }}
+          >
+            {form.dividido ? '← Un solo medio de pago' : 'Pagó parte y parte'}
+          </button>
+        )}
       </div>
+
+      {!form.esFiado && form.dividido && (
+        <div className="sub-card campo">
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
+                En efectivo
+              </label>
+              <input
+                type="number" inputMode="decimal" step="any" min="0"
+                value={form.montoEfectivo}
+                onChange={(e) => setForm({ ...form, montoEfectivo: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
+                Por transferencia
+              </label>
+              <div
+                style={{
+                  padding: '11px 14px', border: '1.5px solid var(--border)',
+                  borderRadius: 'var(--radius)', backgroundColor: 'var(--surface-2)',
+                  fontSize: '1rem', color: restoEditado < 0 ? 'var(--danger)' : 'var(--text)',
+                }}
+              >
+                {formatearMonto(Math.max(0, restoEditado))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {form.esFiado && (
         <div className="campo">
@@ -495,7 +569,7 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
         </div>
       )}
 
-      {!form.esFiado && form.metodoPago === 'Transferencia' && (
+      {!form.esFiado && (form.metodoPago === 'Transferencia' || form.dividido) && (
         <div className="campo">
           <label>Quién transfiere</label>
           <input value={form.titular} onChange={(e) => setForm({ ...form, titular: e.target.value })} />

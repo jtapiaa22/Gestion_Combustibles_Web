@@ -175,7 +175,7 @@ export function Inicio({ irA }) {
                     backgroundColor: !v.es_fiado ? 'var(--success)' : v.pagado ? 'var(--blue)' : 'var(--accent-dark)',
                   }}
                 >
-                  {!v.es_fiado ? v.metodo_pago : v.pagado ? 'Saldado' : 'Fiado'}
+                  {!v.es_fiado ? v.metodos_pago : v.pagado ? 'Saldado' : 'Fiado'}
                 </span>
               </div>
             </div>

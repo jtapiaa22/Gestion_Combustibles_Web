@@ -67,7 +67,7 @@ try {
   console.log('\nventa al contado');
   const contado = await ventasAPI.registrar({
     combustibleId: comb.id, cantidadLitros: 10, precioPorLitro: 100,
-    esFiado: false, metodoPago: 'Efectivo',
+    esFiado: false, pagos: [{ metodo: 'Efectivo', monto: 1000 }],
   });
   limpiar.push(() => supabase.from('ventas').delete().eq('id', contado.id));
   check('total generado = litros × precio', cerca(contado.total, 1000), `total=${contado.total}`);
@@ -81,9 +81,46 @@ try {
 
   let sinMetodo = null;
   try {
-    await ventasAPI.registrar({ combustibleId: comb.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: false });
+    await ventasAPI.registrar({ combustibleId: comb.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: false, pagos: [] });
   } catch (e) { sinMetodo = e.message; }
   check('rechaza venta al contado sin método de pago', !!sinMetodo);
+
+  // ── Pago partido ──────────────────────────────────────────
+  // El caso que motivó unificar los pagos: una venta cobrada mitad en
+  // efectivo y mitad por transferencia. Antes no se podía representar,
+  // porque la venta tenía un solo método.
+  console.log('\npago partido');
+  const partido = await ventasAPI.registrar({
+    combustibleId: comb.id, cantidadLitros: 10, precioPorLitro: 100, esFiado: false,
+    pagos: [
+      { metodo: 'Efectivo', monto: 600 },
+      { metodo: 'Transferencia', monto: 400, titular: 'Juan' },
+    ],
+  });
+  limpiar.push(() => supabase.from('ventas').delete().eq('id', partido.id));
+
+  const vPartido = await ventasAPI.obtenerUna(partido.id);
+  check('la venta partida queda cobrada por completo', vPartido.pagado === true);
+  check('lo cobrado suma los dos pagos', cerca(vPartido.cobrado, 1000), `cobrado=${vPartido.cobrado}`);
+  check('muestra los dos métodos juntos',
+    vPartido.metodos_pago === 'Efectivo + Transferencia', `metodos=${vPartido.metodos_pago}`);
+
+  const pagosPartido = await ventasAPI.obtenerPagosFiado(partido.id);
+  check('quedan dos cobros registrados', pagosPartido.length === 2, `pagos=${pagosPartido.length}`);
+  check('cada uno con su método',
+    pagosPartido.some((p) => p.metodo_pago === 'Efectivo' && cerca(Number(p.monto), 600)) &&
+    pagosPartido.some((p) => p.metodo_pago === 'Transferencia' && cerca(Number(p.monto), 400)));
+
+  let descuadre = null;
+  try {
+    await ventasAPI.registrar({
+      combustibleId: comb.id, cantidadLitros: 10, precioPorLitro: 100, esFiado: false,
+      pagos: [{ metodo: 'Efectivo', monto: 600 }, { metodo: 'Transferencia', monto: 300 }],
+    });
+  } catch (e) { descuadre = e.message; }
+  check('rechaza pagos que no suman el total de la venta', !!descuadre, descuadre || 'no lanzó error');
+
+  await ventasAPI.eliminar(partido.id);
 
   // ── Fiado y cobros ────────────────────────────────────────
   console.log('\nfiado');
@@ -167,7 +204,7 @@ try {
   console.log('\neditar y borrar');
   await ventasAPI.editar(contado.id, {
     combustibleId: comb.id, cantidadLitros: 5, precioPorLitro: 100,
-    esFiado: false, metodoPago: 'Efectivo',
+    esFiado: false, pagos: [{ metodo: 'Efectivo', monto: 500 }],
   });
   const stockTrasEditar = await combustiblesAPI.obtenerTodos();
   check('editar devuelve litros al tanque',
@@ -209,11 +246,11 @@ try {
     // de ese fiado en efectivo.
     const vEfectivo = await ventasAPI.registrar({
       combustibleId: comb.id, cantidadLitros: 3, precioPorLitro: 1000,
-      esFiado: false, metodoPago: 'Efectivo',
+      esFiado: false, pagos: [{ metodo: 'Efectivo', monto: 3000 }],
     });
     const vTransf = await ventasAPI.registrar({
       combustibleId: comb.id, cantidadLitros: 2, precioPorLitro: 1000,
-      esFiado: false, metodoPago: 'Transferencia',
+      esFiado: false, pagos: [{ metodo: 'Transferencia', monto: 2000 }],
     });
     const vFiado = await ventasAPI.registrar({
       clienteId: cli.id, combustibleId: comb.id, cantidadLitros: 10, precioPorLitro: 1000, esFiado: true,
@@ -295,7 +332,7 @@ try {
 
   const ventaPremium = await ventasAPI.registrar({
     combustibleId: premium.id, cantidadLitros: 4, precioPorLitro: 3500,
-    esFiado: false, metodoPago: 'Efectivo',
+    esFiado: false, pagos: [{ metodo: 'Efectivo', monto: 14000 }],
   });
   limpiar.push(() => supabase.from('ventas').delete().eq('id', ventaPremium.id));
   check('se le puede vender', cerca(ventaPremium.total, 14000), `total=${ventaPremium.total}`);

@@ -62,9 +62,10 @@ create table ventas (
   -- venta ya cobrada el precio queda congelado.
   total                  numeric(14,2) generated always as (cantidad_litros * precio_por_litro) stored,
 
+  -- Como se cobro NO vive acá: vive en cada fila de `pagos`. Una
+  -- venta se puede pagar mitad en efectivo y mitad por transferencia,
+  -- y eso con un solo campo no se puede representar.
   es_fiado               boolean not null default false,
-  metodo_pago            text check (metodo_pago in ('Efectivo', 'Transferencia')),
-  titular_transferencia  text,
 
   -- Saldar es un evento con fecha, no el resultado de una cuenta. Si
   -- se dedujera del saldo, un precio mal cargado podría dar por
@@ -73,7 +74,6 @@ create table ventas (
   saldado_en             timestamptz,
 
   constraint fiado_necesita_cliente check (not es_fiado or cliente_id is not null),
-  constraint cobrada_necesita_metodo check (es_fiado or metodo_pago is not null),
   constraint solo_fiados_se_saldan  check (saldado_en is null or es_fiado)
 );
 create index ventas_fecha_idx       on ventas (fecha desc);
@@ -81,21 +81,23 @@ create index ventas_cliente_idx     on ventas (cliente_id) where cliente_id is n
 create index ventas_combustible_idx on ventas (combustible_id);
 create index ventas_fiados_abiertos_idx on ventas (combustible_id) where es_fiado and saldado_en is null;
 
--- ── PAGOS DE FIADO ────────────────────────────────────────────
--- Fuente de verdad de cuánto se cobró. Un fiado puede pagarse en
--- varias veces y con distinto método cada vez.
-create table pagos_fiado (
+-- ── PAGOS ─────────────────────────────────────────────────────
+-- Cada cobro recibido, de cualquier venta. Una venta al contado nace
+-- con sus pagos; una fiada los va juntando. Es la fuente de verdad de
+-- cuánta plata entró y por qué vía.
+create table pagos (
   id                     bigint generated always as identity primary key,
   venta_id               bigint not null references ventas(id) on delete cascade,
-  cliente_id             bigint not null references clientes(id) on delete restrict,
+  -- Puede ser null: una venta al contado no necesita cliente.
+  cliente_id             bigint references clientes(id) on delete restrict,
   monto                  numeric(14,2) not null check (monto > 0),
   metodo_pago            text not null check (metodo_pago in ('Efectivo', 'Transferencia')),
   titular_transferencia  text,
   fecha                  timestamptz not null default now()
 );
-create index pagos_venta_idx   on pagos_fiado (venta_id);
-create index pagos_fecha_idx   on pagos_fiado (fecha desc);
-create index pagos_cliente_idx on pagos_fiado (cliente_id);
+create index pagos_venta_idx   on pagos (venta_id);
+create index pagos_fecha_idx   on pagos (fecha desc);
+create index pagos_cliente_idx on pagos (cliente_id) where cliente_id is not null;
 
 -- ── COMPRAS ───────────────────────────────────────────────────
 create table compras_stock (
@@ -118,6 +120,10 @@ create table sesiones_caja (
   notas_apertura text,
   notas_cierre   text,
 
+  -- Plata que quedó en el cajón al abrir, para dar vuelto. Sin
+  -- contarla, lo que "tiene que haber" al cerrar da siempre de menos.
+  fondo_inicial  numeric(14,2) not null default 0 check (fondo_inicial >= 0),
+
   -- Totales congelados al cerrar: son el registro contable de ese
   -- turno y no cambian aunque después se edite una venta.
   total_efectivo         numeric(14,2),
@@ -125,6 +131,11 @@ create table sesiones_caja (
   total_fiado_nuevo      numeric(14,2),
   total_fiado_cobrado    numeric(14,2),
   total_cobrado          numeric(14,2),
+  -- Arqueo: lo que tenía que haber contra lo que se contó. La
+  -- diferencia no se guarda, es una resta entre estos dos. Contado en
+  -- null significa que no se hizo arqueo, que no es lo mismo que cero.
+  efectivo_esperado      numeric(14,2),
+  efectivo_contado       numeric(14,2) check (efectivo_contado is null or efectivo_contado >= 0),
   -- Desglose por combustible. Es una foto del turno, no algo que se
   -- consulte relacionalmente, y así funciona con dos o con seis.
   litros_por_combustible jsonb,
@@ -152,6 +163,10 @@ select
   cl.nombre as cliente_nombre,
   co.nombre as combustible_nombre,
   coalesce(p.cobrado, 0) as cobrado,
+  -- Cómo se cobró, para mostrar: "Efectivo", "Transferencia", o
+  -- "Efectivo + Transferencia" si fue partido.
+  p.metodos as metodos_pago,
+  p.titulares as titulares_transferencia,
   -- Un fiado saldado no tiene saldo. Uno abierto debe lo que vale hoy
   -- menos lo ya cobrado; si el precio quedó por debajo de lo cobrado,
   -- da cero pero sigue abierto y se recupera al corregirlo.
@@ -162,14 +177,18 @@ select
   -- Pagado es un hecho, no una cuenta.
   case when v.es_fiado
        then v.saldado_en is not null
-       else true
+       else coalesce(p.cobrado, 0) >= v.total - 0.01
   end as pagado
 from ventas v
 left join clientes cl on cl.id = v.cliente_id
 join combustibles co on co.id = v.combustible_id
 left join (
-  select venta_id, sum(monto) as cobrado
-  from pagos_fiado
+  select
+    venta_id,
+    sum(monto) as cobrado,
+    string_agg(distinct metodo_pago, ' + ' order by metodo_pago) as metodos,
+    string_agg(distinct titular_transferencia, ', ') as titulares
+  from pagos
   group by venta_id
 ) p on p.venta_id = v.id;
 
@@ -206,14 +225,14 @@ join combustibles co on co.id = cs.combustible_id;
 alter table clientes      enable row level security;
 alter table combustibles  enable row level security;
 alter table ventas        enable row level security;
-alter table pagos_fiado   enable row level security;
+alter table pagos         enable row level security;
 alter table compras_stock enable row level security;
 alter table sesiones_caja enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['clientes','combustibles','ventas','pagos_fiado','compras_stock','sesiones_caja']
+  foreach t in array array['clientes','combustibles','ventas','pagos','compras_stock','sesiones_caja']
   loop
     execute format(
       'create policy %I on %I for all to authenticated using (true) with check (true)',

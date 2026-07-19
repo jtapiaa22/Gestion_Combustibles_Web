@@ -269,7 +269,7 @@ export const clientesAPI = {
 
   obtenerPagos: async (clienteId) =>
     alzar(
-      await supabase.from('pagos_fiado').select('*').eq('cliente_id', clienteId).order('fecha', { ascending: false })
+      await supabase.from('pagos').select('*').eq('cliente_id', clienteId).order('fecha', { ascending: false })
     ),
 
   eliminar: async (clienteId) => {
@@ -290,12 +290,27 @@ export const ventasAPI = {
    * recién cuando se cobra, y puede cobrarse en varias veces y con
    * métodos distintos. Por eso el método vive en cada pago.
    */
+  /**
+   * @param pagos  Cómo se cobró: [{ metodo, monto, titular }]. Una
+   *   venta al contado nace con sus pagos — uno solo, o varios si se
+   *   pagó parte en efectivo y parte por transferencia. Un fiado nace
+   *   sin ninguno y los va juntando.
+   */
   registrar: async ({
-    clienteId, combustibleId, cantidadLitros, precioPorLitro,
-    esFiado, metodoPago, titularTransferencia,
+    clienteId, combustibleId, cantidadLitros, precioPorLitro, esFiado, pagos = [],
   }) => {
     if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
-    if (!esFiado && !metodoPago) throw new Error('Indicá cómo se cobró la venta');
+
+    const total = cantidadLitros * precioPorLitro;
+    if (!esFiado) {
+      if (!pagos.length) throw new Error('Indicá cómo se cobró la venta');
+      const suma = pagos.reduce((s, p) => s + num(p.monto), 0);
+      if (Math.abs(suma - total) > 0.01) {
+        throw new Error(
+          `Los pagos suman ${suma.toFixed(2)} y la venta es de ${total.toFixed(2)}: tienen que coincidir`
+        );
+      }
+    }
 
     const nueva = alzar(
       await supabase
@@ -307,12 +322,28 @@ export const ventasAPI = {
           cantidad_litros: cantidadLitros,
           precio_por_litro: precioPorLitro,
           es_fiado: !!esFiado,
-          metodo_pago: esFiado ? null : metodoPago,
-          titular_transferencia: metodoPago === 'Transferencia' ? titularTransferencia || null : null,
         })
         .select()
         .single()
     );
+
+    if (pagos.length) {
+      const fecha = ahora();
+      alzar(
+        await supabase.from('pagos').insert(
+          pagos
+            .filter((p) => num(p.monto) > 0)
+            .map((p) => ({
+              venta_id: nueva.id,
+              cliente_id: clienteId || null,
+              monto: num(p.monto),
+              metodo_pago: p.metodo,
+              titular_transferencia: p.metodo === 'Transferencia' ? p.titular || null : null,
+              fecha,
+            }))
+        ).select('id')
+      );
+    }
 
     await combustiblesAPI.actualizarCantidad(combustibleId, -cantidadLitros);
     return venta(nueva);
@@ -354,26 +385,19 @@ export const ventasAPI = {
   },
 
   /**
-   * Totales por método de pago. Combina dos fuentes, porque en el
-   * esquema nuevo el método de una venta al contado está en la venta,
-   * y el de un fiado está en cada pago. Antes se pisaba el método de
-   * la venta al cobrarla y se perdía cómo se había vendido.
+   * Totales por método de pago. Con todos los cobros en la misma
+   * tabla es una sola query: antes había que combinar el método de la
+   * venta con el de cada pago de fiado, y una venta pagada mitad y
+   * mitad no se podía representar.
    */
   obtenerTotalesPorMetodo: async () => {
-    const [alContado, pagos] = await Promise.all([
-      supabase.from('ventas').select('metodo_pago, total').eq('es_fiado', false),
-      supabase.from('pagos_fiado').select('metodo_pago, monto'),
-    ]);
-
+    const pagos = alzar(await supabase.from('pagos').select('metodo_pago, monto'));
     const acc = {};
-    const sumar = (metodo, monto) => {
-      acc[metodo] ??= { metodo_pago: metodo, total: 0, cantidad: 0 };
-      acc[metodo].total += num(monto);
-      acc[metodo].cantidad++;
-    };
-
-    alzar(alContado).forEach((v) => sumar(v.metodo_pago, v.total));
-    alzar(pagos).forEach((p) => sumar(p.metodo_pago, p.monto));
+    for (const p of pagos) {
+      acc[p.metodo_pago] ??= { metodo_pago: p.metodo_pago, total: 0, cantidad: 0 };
+      acc[p.metodo_pago].total += num(p.monto);
+      acc[p.metodo_pago].cantidad++;
+    }
     return Object.values(acc);
   },
 
@@ -393,7 +417,7 @@ export const ventasAPI = {
 
     alzar(
       await supabase
-        .from('pagos_fiado')
+        .from('pagos')
         .insert({
           venta_id: ventaId,
           cliente_id: v.cliente_id,
@@ -464,7 +488,7 @@ export const ventasAPI = {
       restante -= aplicado;
     }
 
-    alzar(await supabase.from('pagos_fiado').insert(aInsertar).select('id'));
+    alzar(await supabase.from('pagos').insert(aInsertar).select('id'));
 
     if (saldadas.length) {
       alzar(
@@ -481,8 +505,15 @@ export const ventasAPI = {
     };
   },
 
+  /** Los cobros de un período, para desglosar por método. */
+  obtenerPagosPorFecha: async (desde, hasta) => {
+    let q = supabase.from('pagos').select('*').order('fecha', { ascending: false });
+    if (desde && hasta) q = q.gte('fecha', inicioDelDia(desde)).lte('fecha', finDelDia(hasta));
+    return alzar(await q).map((p) => ({ ...p, monto: num(p.monto) }));
+  },
+
   obtenerPagosFiado: async (ventaId) =>
-    alzar(await supabase.from('pagos_fiado').select('*').eq('venta_id', ventaId).order('fecha', { ascending: false })),
+    alzar(await supabase.from('pagos').select('*').eq('venta_id', ventaId).order('fecha', { ascending: false })),
 
   /**
    * Editar sólo ajusta el stock. La deuda ya no hay que tocarla: al
@@ -494,14 +525,23 @@ export const ventasAPI = {
     const anterior = await ventasAPI.obtenerUna(ventaId);
     if (!anterior) throw new Error('Venta no encontrada');
 
-    const { combustibleId, cantidadLitros, precioPorLitro, metodoPago, clienteId, esFiado, titularTransferencia } = datos;
+    const { combustibleId, cantidadLitros, precioPorLitro, clienteId, esFiado, pagos = [] } = datos;
+    const nuevoTotal = cantidadLitros * precioPorLitro;
 
     if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
-    if (!esFiado && !metodoPago) throw new Error('Indicá cómo se cobró la venta');
-    if (anterior.es_fiado && !esFiado && anterior.cobrado > 0.01) {
-      throw new Error('Esta venta ya tiene pagos registrados. Borrá los pagos antes de convertirla en venta al contado.');
+    if (!esFiado) {
+      if (!pagos.length) throw new Error('Indicá cómo se cobró la venta');
+      const suma = pagos.reduce((s, p) => s + num(p.monto), 0);
+      if (Math.abs(suma - nuevoTotal) > 0.01) {
+        throw new Error(
+          `Los pagos suman ${suma.toFixed(2)} y la venta es de ${nuevoTotal.toFixed(2)}: tienen que coincidir`
+        );
+      }
     }
-    if (esFiado && cantidadLitros * precioPorLitro < anterior.cobrado - 0.01) {
+    if (anterior.es_fiado && !esFiado && anterior.cobrado > 0.01) {
+      throw new Error('Este fiado ya tiene cobros registrados. Borralos antes de pasarlo a venta al contado.');
+    }
+    if (esFiado && nuevoTotal < anterior.cobrado - 0.01) {
       throw new Error('El nuevo total quedaría por debajo de lo ya cobrado en esta venta.');
     }
 
@@ -516,7 +556,6 @@ export const ventasAPI = {
     // Si la corrección hace que el fiado valga más de lo ya cobrado,
     // vuelve a estar abierto: el cliente pasa a deber la diferencia.
     // Y una venta al contado nunca lleva fecha de saldado.
-    const nuevoTotal = cantidadLitros * precioPorLitro;
     const saldadoEn = !esFiado || nuevoTotal > anterior.cobrado + 0.01 ? null : anterior.saldado_en;
 
     alzar(
@@ -528,13 +567,33 @@ export const ventasAPI = {
           cantidad_litros: cantidadLitros,
           precio_por_litro: precioPorLitro,
           es_fiado: !!esFiado,
-          metodo_pago: esFiado ? null : metodoPago,
-          titular_transferencia: metodoPago === 'Transferencia' ? titularTransferencia || null : null,
           saldado_en: saldadoEn,
         })
         .eq('id', ventaId)
         .select('id')
     );
+
+    // En una venta al contado los pagos son parte de la venta, así que
+    // se reemplazan. En un fiado NO se tocan: son cobros que ya
+    // ocurrieron y tienen su propia fecha.
+    if (!esFiado) {
+      await supabase.from('pagos').delete().eq('venta_id', ventaId);
+      const fecha = anterior.fecha || ahora();
+      alzar(
+        await supabase.from('pagos').insert(
+          pagos
+            .filter((p) => num(p.monto) > 0)
+            .map((p) => ({
+              venta_id: ventaId,
+              cliente_id: clienteId || null,
+              monto: num(p.monto),
+              metodo_pago: p.metodo,
+              titular_transferencia: p.metodo === 'Transferencia' ? p.titular || null : null,
+              fecha,
+            }))
+        ).select('id')
+      );
+    }
   },
 
   /** Devuelve los litros al tanque. Los pagos se van en cascada. */
@@ -605,12 +664,12 @@ const costosPorCombustible = async () => {
 async function calcularTotales(desde, hasta, fondoInicial = 0) {
   const [ventasRaw, pagosRaw, costos] = await Promise.all([
     supabase.from('v_ventas').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
-    supabase.from('pagos_fiado').select('*, clientes(nombre)').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
+    supabase.from('pagos').select('*, clientes(nombre)').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
     costosPorCombustible(),
   ]);
 
   const lista = ventas(alzar(ventasRaw));
-  const pagosFiado = alzar(pagosRaw).map(({ clientes, ...p }) => ({
+  const pagos = alzar(pagosRaw).map(({ clientes, ...p }) => ({
     ...p,
     monto: num(p.monto),
     cliente_nombre: clientes?.nombre || null,
@@ -620,14 +679,25 @@ async function calcularTotales(desde, hasta, fondoInicial = 0) {
   const fiadas = lista.filter((v) => v.es_fiado);
   const sumar = (arr, f) => arr.reduce((s, x) => s + num(f(x)), 0);
 
-  const totalEfectivo = sumar(alContado.filter((v) => v.metodo_pago === 'Efectivo'), (v) => v.total);
-  const totalTransferencia = sumar(alContado.filter((v) => v.metodo_pago === 'Transferencia'), (v) => v.total);
+  // Ahora TODA la plata pasa por la tabla de pagos, asi que el
+  // efectivo del cajon es simplemente la suma de los pagos en
+  // efectivo. Ya no hay que distinguir si vinieron de una venta al
+  // contado o del cobro de un fiado viejo.
+  const enEfectivo = sumar(pagos.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto);
+  const enTransferencia = sumar(pagos.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto);
+
+  // Lo cobrado por ventas del turno, separado de los cobros de fiados
+  // viejos: son dos cosas distintas para el que lee el cierre.
+  const idsDelTurno = new Set(alContado.map((v) => v.id));
+  const pagosDeVentas = pagos.filter((p) => idsDelTurno.has(p.venta_id));
+  const pagosDeFiados = pagos.filter((p) => !idsDelTurno.has(p.venta_id));
+
+  const totalEfectivo = sumar(pagosDeVentas.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto);
+  const totalTransferencia = sumar(pagosDeVentas.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto);
   const totalCobrado = totalEfectivo + totalTransferencia;
 
-  // Los cobros de fiado se separan por método porque, al cerrar, la
-  // pregunta concreta es cuánta plata tiene que haber en el cajón.
-  const fiadoEfectivo = sumar(pagosFiado.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto);
-  const fiadoTransferencia = sumar(pagosFiado.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto);
+  const fiadoEfectivo = sumar(pagosDeFiados.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto);
+  const fiadoTransferencia = sumar(pagosDeFiados.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto);
 
   // El costo se cuenta sobre lo vendido al contado, igual que antes.
   // Un fiado cobrado hoy pero vendido en otro turno no suma costo
@@ -644,7 +714,10 @@ async function calcularTotales(desde, hasta, fondoInicial = 0) {
 
   return {
     ventas: lista,
-    pagosFiado,
+    pagos,
+    // Los cobros de fiados viejos, que es lo que la pantalla lista
+    // aparte de las ventas del turno.
+    pagosFiado: pagosDeFiados,
     totalEfectivo,
     totalTransferencia,
     totalCobrado,
@@ -653,9 +726,10 @@ async function calcularTotales(desde, hasta, fondoInicial = 0) {
     fiadoCobradoEfectivo: fiadoEfectivo,
     fiadoCobradoTransferencia: fiadoTransferencia,
     fondoInicial,
-    // Lo que tiene que haber en el cajón: el fondo que quedó de antes,
-    // más las ventas en efectivo, más los fiados cobrados en efectivo.
-    efectivoEnCaja: fondoInicial + totalEfectivo + fiadoEfectivo,
+    // Lo que tiene que haber en el cajón: el fondo que quedó de antes
+    // más todo lo que entró en efectivo, venga de donde venga.
+    efectivoEnCaja: fondoInicial + enEfectivo,
+    totalEnTransferencia: enTransferencia,
     litrosPorCombustible,
     ganancia: totalCobrado - costoVendido,
     cantidadVentas: lista.length,

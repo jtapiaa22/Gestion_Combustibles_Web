@@ -308,7 +308,7 @@ export function Clientes() {
                         <td><strong>{formatearMonto(v.total)}</strong></td>
                         <td>
                           {!v.es_fiado ? (
-                            <span style={{ color: 'var(--text-secondary)' }}>{v.metodo_pago}</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>{v.metodos_pago}</span>
                           ) : v.pagado ? (
                             <span className="badge" style={{ backgroundColor: 'var(--success)' }}>Saldado</span>
                           ) : (

@@ -446,7 +446,7 @@ function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
                       : 'var(--success)',
                   }}
                 >
-                  {m.tipo === 'pago' ? `Cobro ${m.dato.metodo_pago}` : m.dato.es_fiado ? 'Fiado' : m.dato.metodo_pago}
+                  {m.tipo === 'pago' ? `Cobro ${m.dato.metodo_pago}` : m.dato.es_fiado ? 'Fiado' : m.dato.metodos_pago}
                 </span>
               </div>
             </div>
@@ -596,7 +596,7 @@ function DetalleSesion({ sesion, datos }) {
               {movimientos.map((m) => (
                 <tr key={`${m.tipo}-${m.dato.id}`}>
                   <td>{formatearHora(m.fecha)}</td>
-                  <td>{m.tipo === 'pago' ? 'Cobro fiado' : m.dato.es_fiado ? 'Fiado' : m.dato.metodo_pago}</td>
+                  <td>{m.tipo === 'pago' ? 'Cobro fiado' : m.dato.es_fiado ? 'Fiado' : m.dato.metodos_pago}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>
                     {m.tipo === 'venta'
                       ? `${m.dato.combustible_nombre} ${m.dato.cantidad_litros.toFixed(2)} L${m.dato.cliente_nombre ? ` · ${m.dato.cliente_nombre}` : ''}`

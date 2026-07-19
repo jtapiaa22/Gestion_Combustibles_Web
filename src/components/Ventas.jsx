@@ -11,6 +11,8 @@ const FORM_VACIO = {
   cobro: 'Efectivo', // Efectivo | Transferencia | Fiado
   clienteId: null,
   titularTransferencia: '',
+  dividido: false,     // pagó parte en efectivo y parte por transferencia
+  montoEfectivo: '',
 };
 
 // La cantidad_litros se guarda con 3 decimales. Redondeamos acá para
@@ -76,14 +78,25 @@ export function Ventas() {
   const total = redondearLitros(litros) * precio;
   const esFiado = form.cobro === 'Fiado';
 
+  // En el pago dividido se carga el efectivo y el resto va por
+  // transferencia: así siempre suman el total exacto y no hay forma de
+  // que queden descuadrados.
+  const montoEfectivo = parseFloat(form.montoEfectivo) || 0;
+  const restoTransferencia = total - montoEfectivo;
+
   const problema = useMemo(() => {
     if (!combustible) return cargando ? null : 'No hay ningún combustible cargado. Agregalo en Stock.';
     if (precio <= 0) return `No hay precio cargado para ${combustible.nombre}`;
     if (litros <= 0) return null; // todavía no cargó nada, no es un error
     if (litros > disponible) return `Solo quedan ${disponible.toFixed(2)} litros de ${combustible.nombre}`;
     if (esFiado && !form.clienteId) return 'Elegí a quién se le fía';
+    if (!esFiado && form.dividido) {
+      if (montoEfectivo <= 0) return 'Poné cuánto pagó en efectivo';
+      if (restoTransferencia < -0.01) return 'El efectivo no puede superar el total de la venta';
+      if (restoTransferencia < 0.01) return 'Si paga todo en efectivo, elegí Efectivo arriba';
+    }
     return null;
-  }, [combustible, cargando, precio, litros, disponible, esFiado, form.clienteId]);
+  }, [combustible, cargando, precio, litros, disponible, esFiado, form.clienteId, form.dividido, montoEfectivo, restoTransferencia]);
 
   const puedeRegistrar = litros > 0 && !problema && !registrando;
 
@@ -103,14 +116,24 @@ export function Ventas() {
         await cajaAPI.abrirCaja('Abierta al registrar una venta');
       }
 
+      // Un fiado nace sin pagos; una venta al contado nace con el
+      // suyo, o con los dos si fue partido.
+      const pagos = esFiado
+        ? []
+        : form.dividido
+          ? [
+              { metodo: 'Efectivo', monto: montoEfectivo },
+              { metodo: 'Transferencia', monto: restoTransferencia, titular: form.titularTransferencia },
+            ]
+          : [{ metodo: form.cobro, monto: total, titular: form.titularTransferencia }];
+
       await ventasAPI.registrar({
         clienteId: esFiado ? form.clienteId : null,
         combustibleId: form.combustibleId,
         cantidadLitros: redondearLitros(litros),
         precioPorLitro: precio,
         esFiado,
-        metodoPago: esFiado ? null : form.cobro,
-        titularTransferencia: form.cobro === 'Transferencia' ? form.titularTransferencia : null,
+        pagos,
       });
       mostrar(`Venta registrada · ${formatearMonto(total)}`);
       setForm({ ...FORM_VACIO, combustibleId: form.combustibleId });
@@ -246,16 +269,68 @@ export function Ventas() {
                   key={c}
                   data-tono={c === 'Fiado' ? 'fiado' : undefined}
                   className={form.cobro === c ? 'activo' : ''}
-                  onClick={() => set({ cobro: c, clienteId: null, titularTransferencia: '' })}
+                  onClick={() => set({ cobro: c, clienteId: null, titularTransferencia: '', dividido: false })}
                 >
                   {c}
                 </button>
               ))}
             </div>
+
+            {/* El caso común es un solo método y queda en un toque. El
+                pago partido es un paso extra, a propósito. */}
+            {!esFiado && (
+              <button
+                onClick={() => set({ dividido: !form.dividido, montoEfectivo: '' })}
+                style={{
+                  marginTop: 8, background: 'transparent', padding: 0,
+                  color: form.dividido ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontSize: '0.8125rem', fontWeight: 600, textDecoration: 'underline',
+                }}
+              >
+                {form.dividido ? '← Un solo medio de pago' : 'Pagó parte y parte'}
+              </button>
+            )}
           </div>
 
+          {/* Pago dividido */}
+          {!esFiado && form.dividido && total > 0 && (
+            <div className="sub-card campo">
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
+                    En efectivo
+                  </label>
+                  <input
+                    type="number" inputMode="decimal" step="any" min="0" autoFocus
+                    value={form.montoEfectivo}
+                    onChange={(e) => set({ montoEfectivo: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
+                    Por transferencia
+                  </label>
+                  {/* El resto se calcula solo: se carga un número, no dos */}
+                  <div
+                    style={{
+                      padding: '11px 14px', border: '1.5px solid var(--border)',
+                      borderRadius: 'var(--radius)', backgroundColor: 'var(--surface-2)',
+                      fontSize: '1rem', color: restoTransferencia < 0 ? 'var(--danger)' : 'var(--text)',
+                    }}
+                  >
+                    {formatearMonto(Math.max(0, restoTransferencia))}
+                  </div>
+                </div>
+              </div>
+              <small className="ayuda">
+                Poné cuánto te dio en efectivo y el resto se toma como transferencia.
+              </small>
+            </div>
+          )}
+
           {/* Transferencia */}
-          {form.cobro === 'Transferencia' && (
+          {(form.cobro === 'Transferencia' || (form.dividido && !esFiado)) && (
             <div className="sub-card campo">
               <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
                 Quién transfiere
@@ -437,7 +512,7 @@ export function Ventas() {
                         {v.es_fiado ? (
                           <span className="badge" style={{ backgroundColor: 'var(--accent-dark)' }}>Fiado</span>
                         ) : (
-                          <>{v.metodo_pago}{v.titular_transferencia ? ` · ${v.titular_transferencia}` : ''}</>
+                          <>{v.metodos_pago}{v.titulares_transferencia ? ` · ${v.titulares_transferencia}` : ''}</>
                         )}
                       </td>
                       <td style={{ color: 'var(--text-secondary)' }}>{v.cliente_nombre || '—'}</td>
@@ -455,7 +530,7 @@ export function Ventas() {
                     {v.es_fiado ? (
                       <span className="badge" style={{ backgroundColor: 'var(--accent-dark)' }}>Fiado</span>
                     ) : (
-                      <span className="badge" style={{ backgroundColor: 'var(--success)' }}>{v.metodo_pago}</span>
+                      <span className="badge" style={{ backgroundColor: 'var(--success)' }}>{v.metodos_pago}</span>
                     )}
                   </div>
                   <div className="detalle">
