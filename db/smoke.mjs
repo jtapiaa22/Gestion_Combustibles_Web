@@ -149,6 +149,41 @@ try {
   try { await ventasAPI.registrarPago(fiado.id, 99999, 'Efectivo'); } catch (e) { excede = e.message; }
   check('rechaza cobrar más que el saldo', !!excede, excede || 'no lanzó error');
 
+  // ── Fiado con entrega ─────────────────────────────────────
+  // El caso real: sale $4.000, paga $3.000 y queda debiendo $1.000.
+  console.log('\nfiado con entrega');
+  const conEntrega = await ventasAPI.registrar({
+    clienteId: cli.id, combustibleId: comb.id, cantidadLitros: 2, precioPorLitro: 2000,
+    esFiado: true, pagos: [{ metodo: 'Efectivo', monto: 3000 }],
+  });
+  limpiar.push(() => supabase.from('ventas').delete().eq('id', conEntrega.id));
+
+  const vEntrega = await ventasAPI.obtenerUna(conEntrega.id);
+  check('la venta vale el total, no lo que entregó', cerca(vEntrega.total, 4000), `total=${vEntrega.total}`);
+  check('queda debiendo la diferencia', cerca(vEntrega.saldo, 1000), `saldo=${vEntrega.saldo}`);
+  check('registra lo que entregó', cerca(vEntrega.cobrado, 3000), `cobrado=${vEntrega.cobrado}`);
+  check('sigue siendo un fiado abierto', vEntrega.es_fiado === true && vEntrega.pagado === false);
+
+  // Los $3.000 entraron al cajón aunque la venta sea fiada
+  const pagosEntrega = await ventasAPI.obtenerPagosFiado(conEntrega.id);
+  check('la entrega queda como un cobro en efectivo',
+    pagosEntrega.length === 1 && pagosEntrega[0].metodo_pago === 'Efectivo');
+
+  let entregaDeMas = null;
+  try {
+    await ventasAPI.registrar({
+      clienteId: cli.id, combustibleId: comb.id, cantidadLitros: 2, precioPorLitro: 2000,
+      esFiado: true, pagos: [{ metodo: 'Efectivo', monto: 4000 }],
+    });
+  } catch (e) { entregaDeMas = e.message; }
+  check('si entrega todo, no lo deja registrar como fiado', !!entregaDeMas, entregaDeMas || 'no lanzó error');
+
+  // Y después se le cobra el resto normalmente
+  await ventasAPI.registrarPago(conEntrega.id, 1000, 'Transferencia', 'Juan');
+  const saldadoEntrega = await ventasAPI.obtenerUna(conEntrega.id);
+  check('al cobrar el resto queda saldada', saldadoEntrega.pagado === true && cerca(saldadoEntrega.saldo, 0));
+  await ventasAPI.eliminar(conEntrega.id);
+
   // ── Revaluación por cambio de precio ──────────────────────
   console.log('\ncambio de precio');
   await combustiblesAPI.actualizarPrecio(comb.id, 200);

@@ -302,13 +302,25 @@ export const ventasAPI = {
     if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
 
     const total = cantidadLitros * precioPorLitro;
+    const suma = pagos.reduce((s, p) => s + num(p.monto), 0);
+
     if (!esFiado) {
       if (!pagos.length) throw new Error('Indicá cómo se cobró la venta');
-      const suma = pagos.reduce((s, p) => s + num(p.monto), 0);
       if (Math.abs(suma - total) > 0.01) {
         throw new Error(
           `Los pagos suman ${suma.toFixed(2)} y la venta es de ${total.toFixed(2)}: tienen que coincidir`
         );
+      }
+    } else {
+      // Un fiado puede nacer con una entrega: paga algo ahora y queda
+      // debiendo el resto. Pero si la entrega cubre todo, no es un
+      // fiado — y dejarlo pasar lo dejaría con saldo cero y sin fecha
+      // de saldado, que es justo el estado anómalo que evita saldado_en.
+      if (suma > total + 0.01) {
+        throw new Error(`Está entregando ${suma.toFixed(2)} y la venta es de ${total.toFixed(2)}`);
+      }
+      if (suma >= total - 0.01 && total > 0) {
+        throw new Error('Si paga todo ahora no es un fiado: elegí Efectivo o Transferencia');
       }
     }
 

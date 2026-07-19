@@ -13,6 +13,9 @@ const FORM_VACIO = {
   titularTransferencia: '',
   dividido: false,     // pagó parte en efectivo y parte por transferencia
   montoEfectivo: '',
+  conEntrega: false,   // fiado en el que entrega algo al momento
+  montoEntrega: '',
+  metodoEntrega: 'Efectivo',
 };
 
 // La cantidad_litros se guarda con 3 decimales. Redondeamos acá para
@@ -84,19 +87,27 @@ export function Ventas() {
   const montoEfectivo = parseFloat(form.montoEfectivo) || 0;
   const restoTransferencia = total - montoEfectivo;
 
+  // Fiado con entrega: paga algo al momento y queda debiendo el resto.
+  const montoEntrega = esFiado && form.conEntrega ? parseFloat(form.montoEntrega) || 0 : 0;
+  const quedaDebiendo = total - montoEntrega;
+
   const problema = useMemo(() => {
     if (!combustible) return cargando ? null : 'No hay ningún combustible cargado. Agregalo en Stock.';
     if (precio <= 0) return `No hay precio cargado para ${combustible.nombre}`;
     if (litros <= 0) return null; // todavía no cargó nada, no es un error
     if (litros > disponible) return `Solo quedan ${disponible.toFixed(2)} litros de ${combustible.nombre}`;
     if (esFiado && !form.clienteId) return 'Elegí a quién se le fía';
+    if (esFiado && form.conEntrega) {
+      if (montoEntrega <= 0) return 'Poné cuánto entrega';
+      if (quedaDebiendo < 0.01) return 'Si entrega todo no es un fiado: elegí Efectivo o Transferencia';
+    }
     if (!esFiado && form.dividido) {
       if (montoEfectivo <= 0) return 'Poné cuánto pagó en efectivo';
       if (restoTransferencia < -0.01) return 'El efectivo no puede superar el total de la venta';
       if (restoTransferencia < 0.01) return 'Si paga todo en efectivo, elegí Efectivo arriba';
     }
     return null;
-  }, [combustible, cargando, precio, litros, disponible, esFiado, form.clienteId, form.dividido, montoEfectivo, restoTransferencia]);
+  }, [combustible, cargando, precio, litros, disponible, esFiado, form.clienteId, form.dividido, montoEfectivo, restoTransferencia, form.conEntrega, montoEntrega, quedaDebiendo]);
 
   const puedeRegistrar = litros > 0 && !problema && !registrando;
 
@@ -119,7 +130,9 @@ export function Ventas() {
       // Un fiado nace sin pagos; una venta al contado nace con el
       // suyo, o con los dos si fue partido.
       const pagos = esFiado
-        ? []
+        ? (montoEntrega > 0
+            ? [{ metodo: form.metodoEntrega, monto: montoEntrega, titular: form.titularTransferencia }]
+            : [])
         : form.dividido
           ? [
               { metodo: 'Efectivo', monto: montoEfectivo },
@@ -135,7 +148,11 @@ export function Ventas() {
         esFiado,
         pagos,
       });
-      mostrar(`Venta registrada · ${formatearMonto(total)}`);
+      mostrar(
+        esFiado && montoEntrega > 0
+          ? `Fiado registrado · entregó ${formatearMonto(montoEntrega)}, queda debiendo ${formatearMonto(quedaDebiendo)}`
+          : `Venta registrada · ${formatearMonto(total)}`
+      );
       setForm({ ...FORM_VACIO, combustibleId: form.combustibleId });
       setMontoPagado('');
       setFormCliente(null);
@@ -330,7 +347,7 @@ export function Ventas() {
           )}
 
           {/* Transferencia */}
-          {(form.cobro === 'Transferencia' || (form.dividido && !esFiado)) && (
+          {(form.cobro === 'Transferencia' || (form.dividido && !esFiado) || (esFiado && form.conEntrega && form.metodoEntrega === 'Transferencia')) && (
             <div className="sub-card campo">
               <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
                 Quién transfiere
@@ -366,8 +383,54 @@ export function Ventas() {
               {clienteElegido && clienteElegido.debe > 0.5 && (
                 <small className="ayuda" style={{ color: 'var(--accent-dark)', fontWeight: 600 }}>
                   Ya debe {formatearMonto(clienteElegido.debe)}. Con esta venta pasaría a{' '}
-                  {formatearMonto(clienteElegido.debe + total)}.
+                  {formatearMonto(clienteElegido.debe + quedaDebiendo)}.
                 </small>
+              )}
+
+              {/* Entrega: paga una parte ahora y queda debiendo el resto */}
+              <button
+                onClick={() => set({ conEntrega: !form.conEntrega, montoEntrega: '' })}
+                style={{
+                  marginTop: 10, background: 'transparent', padding: 0,
+                  color: form.conEntrega ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontSize: '0.8125rem', fontWeight: 600, textDecoration: 'underline',
+                }}
+              >
+                {form.conEntrega ? '← Se lleva todo fiado' : 'Paga algo ahora'}
+              </button>
+
+              {form.conEntrega && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
+                    Cuánto entrega
+                  </label>
+                  <input
+                    type="number" inputMode="decimal" step="any" min="0" autoFocus
+                    value={form.montoEntrega}
+                    onChange={(e) => set({ montoEntrega: e.target.value })}
+                    placeholder={`Menos de ${formatearMonto(total)}`}
+                  />
+                  <div className="segmentado" style={{ marginTop: 8 }}>
+                    {['Efectivo', 'Transferencia'].map((m) => (
+                      <button
+                        key={m}
+                        className={form.metodoEntrega === m ? 'activo' : ''}
+                        onClick={() => set({ metodoEntrega: m })}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  {montoEntrega > 0 && quedaDebiendo > 0 && (
+                    <div
+                      className="panel-destacado"
+                      style={{ marginTop: 10, backgroundColor: 'var(--accent-dark)' }}
+                    >
+                      <div className="etiqueta">Queda debiendo</div>
+                      <div className="valor">{formatearMonto(quedaDebiendo)}</div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {formCliente === null ? (
