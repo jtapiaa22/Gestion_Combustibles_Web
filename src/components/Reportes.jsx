@@ -163,23 +163,23 @@ export function Reportes() {
           {/* Totales */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 10 }}>
             <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
-              <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700 }}>COBRADO</div>
-              <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--success)' }}>{formatearMonto(cobrado)}</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 3 }}>
+              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>COBRADO</div>
+              <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--success)' }}>{formatearMonto(cobrado)}</div>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
                 {formatearMonto(t.efectivo)} efectivo · {formatearMonto(t.transferencia)} transferencia
               </div>
             </div>
             <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
-              <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700 }}>SE FIÓ</div>
-              <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--accent)' }}>{formatearMonto(t.fiado)}</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 3 }}>
+              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>SE FIÓ</div>
+              <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--accent)' }}>{formatearMonto(t.fiado)}</div>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
                 {t.cantidadFiadas} ventas · {formatearMonto(t.sinCobrar)} todavía sin cobrar
               </div>
             </div>
             <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
-              <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700 }}>COMPRASTE</div>
-              <div style={{ fontSize: 27, fontWeight: 700 }}>{formatearMonto(invertido)}</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 3 }}>
+              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>COMPRASTE</div>
+              <div style={{ fontSize: '1.6875rem', fontWeight: 700 }}>{formatearMonto(invertido)}</div>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
                 {comprasPeriodo.length} {comprasPeriodo.length === 1 ? 'compra' : 'compras'} de combustible
               </div>
             </div>
@@ -238,13 +238,13 @@ export function Reportes() {
                       </td>
                       <td style={{ color: 'var(--text-secondary)' }}>{v.cliente_nombre || '—'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <button onClick={() => setEditando(v)} className="theme-toggle" style={{ padding: '4px 10px', fontSize: 12 }}>
+                        <button onClick={() => setEditando(v)} className="theme-toggle" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
                           Editar
                         </button>
                         <button
                           onClick={() => setBorrando(v)}
                           className="theme-toggle"
-                          style={{ padding: '4px 10px', fontSize: 12, marginLeft: 5, color: 'var(--danger)' }}
+                          style={{ padding: '4px 10px', fontSize: '0.75rem', marginLeft: 5, color: 'var(--danger)' }}
                         >
                           Borrar
                         </button>
@@ -260,7 +260,7 @@ export function Reportes() {
                 <div key={v.id} className="venta-tarjeta">
                   <div className="fila">
                     <div style={{ minWidth: 0 }}>
-                      <strong style={{ fontSize: 15.5 }}>{formatearMonto(v.total)}</strong>
+                      <strong style={{ fontSize: '0.9688rem' }}>{formatearMonto(v.total)}</strong>
                       <div className="detalle">
                         {formatearFecha(v.fecha)} {formatearHora(v.fecha)} · {v.combustible_nombre}
                         {' · '}{v.cantidad_litros.toFixed(2)} L{v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}
@@ -301,29 +301,29 @@ export function Reportes() {
         {borrando && (
           <>
             <div className="sub-card" style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 19, fontWeight: 700 }}>{formatearMonto(borrando.total)}</div>
-              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: '1.1875rem', fontWeight: 700 }}>{formatearMonto(borrando.total)}</div>
+              <div style={{ fontSize: '0.8438rem', color: 'var(--text-secondary)' }}>
                 {formatearFecha(borrando.fecha)} · {borrando.combustible_nombre}
                 {' · '}{borrando.cantidad_litros.toFixed(2)} L
                 {borrando.cliente_nombre ? ` · ${borrando.cliente_nombre}` : ''}
               </div>
             </div>
 
-            <p style={{ marginBottom: 8, lineHeight: 1.5, fontSize: 14 }}>
+            <p style={{ marginBottom: 8, lineHeight: 1.5, fontSize: '0.875rem' }}>
               Los <strong>{borrando.cantidad_litros.toFixed(2)} litros</strong> vuelven al tanque de{' '}
               {borrando.combustible_nombre}.
             </p>
             {borrando.es_fiado && !borrando.pagado && (
-              <p style={{ marginBottom: 8, lineHeight: 1.5, fontSize: 14, color: 'var(--accent)' }}>
+              <p style={{ marginBottom: 8, lineHeight: 1.5, fontSize: '0.875rem', color: 'var(--accent)' }}>
                 {borrando.cliente_nombre} deja de deber {formatearMonto(borrando.saldo)}.
               </p>
             )}
             {borrando.cobrado > 0.01 && (
-              <p style={{ marginBottom: 8, lineHeight: 1.5, fontSize: 14, color: 'var(--danger)' }}>
+              <p style={{ marginBottom: 8, lineHeight: 1.5, fontSize: '0.875rem', color: 'var(--danger)' }}>
                 Ojo: se borran también los {formatearMonto(borrando.cobrado)} que ya había pagado.
               </p>
             )}
-            <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: 13.5 }}>
+            <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: '0.8438rem' }}>
               No se puede deshacer.
             </p>
 
@@ -407,7 +407,7 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
 
   return (
     <Modal abierto onCerrar={onCerrar} titulo="Editar venta" ancho={470}>
-      <div className="sub-card" style={{ marginBottom: 16, fontSize: 13.5, color: 'var(--text-secondary)' }}>
+      <div className="sub-card" style={{ marginBottom: 16, fontSize: '0.8438rem', color: 'var(--text-secondary)' }}>
         Original: {formatearFecha(venta.fecha)} {formatearHora(venta.fecha)} ·{' '}
         {venta.cantidad_litros.toFixed(2)} L de {venta.combustible_nombre} · {formatearMonto(venta.total)}
       </div>
@@ -447,7 +447,7 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
       </div>
 
       {Math.abs(difLitros) > 0.001 && (
-        <div className="sub-card" style={{ marginBottom: 14, fontSize: 13.5 }}>
+        <div className="sub-card" style={{ marginBottom: 14, fontSize: '0.8438rem' }}>
           {difLitros > 0
             ? <>Se van a descontar <strong>{difLitros.toFixed(2)} L</strong> más del tanque.</>
             : <>Vuelven <strong>{Math.abs(difLitros).toFixed(2)} L</strong> al tanque.</>}
@@ -503,7 +503,7 @@ function EditarVentaModal({ venta, combustibles, clientes, onCerrar, onListo, on
       )}
 
       {problema && (
-        <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}>
+        <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: '0.875rem' }}>
           {problema}
         </div>
       )}

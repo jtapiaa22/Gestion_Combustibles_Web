@@ -2,6 +2,17 @@
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ═══════════════ TAMAÑO DE LETRA ═══════════════
+   Todos los tamaños de la app están en rem, así que esta sola línea
+   los escala a todos. La escala se elige desde el botón "A" del
+   encabezado y queda guardada.
+
+   El mínimo es 1: con eso los campos de texto quedan en 16px, que es
+   el umbral por debajo del cual iOS hace zoom al enfocarlos. */
+html {
+  font-size: calc(16px * var(--escala, 1.15));
+}
+
 /* ═══════════════ TEMA ═══════════════ */
 :root {
   --accent: #F59E0B;
@@ -58,7 +69,7 @@
 
 body {
   font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 15px;
+  font-size: 0.9375rem;
   background-color: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -83,7 +94,7 @@ body {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--accent);
@@ -105,7 +116,7 @@ body {
 .nav-btn {
   padding: 8px 15px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   background: transparent;
@@ -116,7 +127,7 @@ body {
   gap: 6px;
 }
 .nav-btn.activo { background-color: var(--accent); color: #1C1917; }
-.nav-btn .icono { font-size: 15px; }
+.nav-btn .icono { font-size: 0.9375rem; }
 
 .app-main { padding: 20px; padding-bottom: 40px; }
 
@@ -137,12 +148,12 @@ body {
     flex-direction: column;
     gap: 2px;
     padding: 6px 2px;
-    font-size: 10px;
+    font-size: 0.625rem;
     letter-spacing: 0;
     border-radius: 10px;
     min-width: 0;
   }
-  .nav-btn .icono { font-size: 19px; }
+  .nav-btn .icono { font-size: 1.1875rem; }
   .nav-btn.activo { background: transparent; color: var(--accent); }
   .app-main { padding: 14px 12px; padding-bottom: calc(var(--nav-alto) + 20px); }
 }
@@ -166,7 +177,7 @@ button:not(:disabled):active { transform: scale(0.985); }
 input, select, textarea {
   font-family: inherit;
   /* 16px evita que iOS haga zoom al enfocar un campo */
-  font-size: 16px;
+  font-size: 1rem;
   background-color: var(--surface);
   color: var(--text);
   border: 1.5px solid var(--border);
@@ -188,10 +199,10 @@ select option { background-color: var(--surface); color: var(--text); }
   display: block;
   margin-bottom: 6px;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 0.8125rem;
   letter-spacing: 0.02em;
 }
-.ayuda { color: var(--text-secondary); font-size: 12.5px; margin-top: 5px; display: block; }
+.ayuda { color: var(--text-secondary); font-size: 0.7812rem; margin-top: 5px; display: block; }
 
 /* Selector segmentado (combustible, modo, método de pago) */
 .segmentado {
@@ -205,7 +216,7 @@ select option { background-color: var(--surface); color: var(--text); }
   flex: 1;
   padding: 10px 6px;
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   font-weight: 700;
   background: transparent;
   color: var(--text-secondary);
@@ -241,14 +252,14 @@ select option { background-color: var(--surface); color: var(--text); }
 .chip-combustible:disabled { opacity: 0.45; }
 .chip-combustible .nombre {
   font-weight: 700;
-  font-size: 14.5px;
+  font-size: 0.9062rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.chip-combustible .precio { font-size: 13px; color: var(--accent); font-weight: 600; }
-.chip-combustible .stock { font-size: 11.5px; color: var(--text-muted); }
+.chip-combustible .precio { font-size: 0.8125rem; color: var(--accent); font-weight: 600; }
+.chip-combustible .stock { font-size: 0.7188rem; color: var(--text-muted); }
 
 /* ═══════════════ SUPERFICIES ═══════════════ */
 .card {
@@ -267,7 +278,7 @@ select option { background-color: var(--surface); color: var(--text); }
 
 .titulo-seccion {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -280,15 +291,15 @@ select option { background-color: var(--surface); color: var(--text); }
   text-align: center;
   color: white;
 }
-.panel-destacado .etiqueta { font-size: 12px; opacity: 0.85; margin-bottom: 2px; }
-.panel-destacado .valor { font-size: 26px; font-weight: 700; line-height: 1.15; }
+.panel-destacado .etiqueta { font-size: 0.75rem; opacity: 0.85; margin-bottom: 2px; }
+.panel-destacado .valor { font-size: 1.625rem; font-weight: 700; line-height: 1.15; }
 
 .badge {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
   border-radius: 20px;
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   font-weight: 700;
   color: white;
 }
@@ -300,7 +311,7 @@ th {
   background-color: var(--table-header-bg);
   color: var(--table-header-text);
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -311,7 +322,7 @@ th {
 td {
   padding: 10px 13px;
   border-bottom: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 0.875rem;
   white-space: nowrap;
 }
 tr:last-child td { border-bottom: none; }
@@ -326,7 +337,7 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
   padding: 12px 14px;
 }
 .venta-tarjeta .fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.venta-tarjeta .detalle { color: var(--text-secondary); font-size: 13px; margin-top: 3px; }
+.venta-tarjeta .detalle { color: var(--text-secondary); font-size: 0.8125rem; margin-top: 3px; }
 
 .vacio {
   background-color: var(--surface-2);
@@ -335,7 +346,7 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
   padding: 26px 20px;
   text-align: center;
   color: var(--text-secondary);
-  font-size: 14.5px;
+  font-size: 0.9062rem;
   line-height: 1.5;
 }
 
@@ -384,7 +395,7 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
   border: 1px solid var(--border);
   border-radius: 8px;
   width: 32px; height: 32px;
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--text-secondary);
   flex-shrink: 0;
 }
@@ -421,8 +432,8 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
 }
 .fila-cliente:hover { border-color: var(--border-strong); }
 .fila-cliente.activo { border-color: var(--accent); background-color: var(--surface-2); }
-.fila-cliente .nombre { font-weight: 600; font-size: 15px; }
-.fila-cliente .sub { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+.fila-cliente .nombre { font-weight: 600; font-size: 0.9375rem; }
+.fila-cliente .sub { color: var(--text-muted); font-size: 0.7812rem; margin-top: 2px; }
 
 /* ═══════════════ TOAST ═══════════════ */
 .toast {
@@ -433,7 +444,7 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
   padding: 12px 20px;
   border-radius: var(--radius);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: white;
   box-shadow: var(--shadow-lg);
   z-index: 9999;
@@ -451,7 +462,7 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
   border: 1px solid var(--border);
   border-radius: 30px;
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-secondary);
   width: auto;

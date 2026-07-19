@@ -118,14 +118,14 @@ export function Clientes() {
       {/* Resumen */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div className="card" style={{ flex: '1 1 150px', padding: 14 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>DEUDA TOTAL</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: deudaTotal > 0 ? 'var(--accent)' : 'var(--text)' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEUDA TOTAL</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: deudaTotal > 0 ? 'var(--accent)' : 'var(--text)' }}>
             {formatearMonto(deudaTotal)}
           </div>
         </div>
         <div className="card" style={{ flex: '1 1 150px', padding: 14 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>DEBEN / TOTAL</div>
-          <div style={{ fontSize: 24, fontWeight: 700 }}>{deudores} <span style={{ color: 'var(--text-muted)', fontSize: 18 }}>/ {clientes.length}</span></div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEBEN / TOTAL</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{deudores} <span style={{ color: 'var(--text-muted)', fontSize: '1.125rem' }}>/ {clientes.length}</span></div>
         </div>
       </div>
 
@@ -142,7 +142,7 @@ export function Clientes() {
               />
               <button
                 onClick={() => setFormCliente({ nombre: '', telefono: '', direccion: '' })}
-                style={{ flexShrink: 0, padding: '0 16px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontSize: 20 }}
+                style={{ flexShrink: 0, padding: '0 16px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontSize: '1.25rem' }}
                 title="Cliente nuevo"
               >
                 +
@@ -152,7 +152,7 @@ export function Clientes() {
             <button
               onClick={() => setSoloDeudores((v) => !v)}
               style={{
-                marginBottom: 10, padding: '7px 13px', borderRadius: 20, fontSize: 13,
+                marginBottom: 10, padding: '7px 13px', borderRadius: 20, fontSize: '0.8125rem',
                 border: '1.5px solid ' + (soloDeudores ? 'var(--accent)' : 'var(--border)'),
                 backgroundColor: soloDeudores ? 'var(--accent)' : 'transparent',
                 color: soloDeudores ? '#1C1917' : 'var(--text-secondary)',
@@ -201,14 +201,14 @@ export function Clientes() {
             {!esEscritorio && (
               <button
                 onClick={() => setSeleccionadoId(null)}
-                style={{ marginBottom: 12, background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, padding: 0 }}
+                style={{ marginBottom: 12, background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.875rem', padding: 0 }}
               >
                 ← Volver a la lista
               </button>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
-              <h2 style={{ fontSize: 21, fontWeight: 700 }}>{seleccionado.nombre}</h2>
+              <h2 style={{ fontSize: '1.3125rem', fontWeight: 700 }}>{seleccionado.nombre}</h2>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 <button
                   onClick={() => setFormCliente({ ...seleccionado })}
@@ -228,7 +228,7 @@ export function Clientes() {
               </div>
             </div>
 
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginBottom: 16 }}>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem', marginBottom: 16 }}>
               {[seleccionado.telefono, seleccionado.direccion].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
             </div>
 
@@ -237,17 +237,17 @@ export function Clientes() {
               <div className="sub-card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 600 }}>DEBE</div>
-                    <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--accent)' }}>
+                    <div style={{ fontSize: '0.7812rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEBE</div>
+                    <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--accent)' }}>
                       {formatearMonto(seleccionado.debe)}
                     </div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)' }}>
                       en {fiadosAbiertos.length} {fiadosAbiertos.length === 1 ? 'fiado' : 'fiados'}
                     </div>
                   </div>
                   <button
                     onClick={() => setCobro({ tipo: 'cliente', cliente: seleccionado })}
-                    style={{ padding: '12px 20px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontSize: 15 }}
+                    style={{ padding: '12px 20px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontSize: '0.9375rem' }}
                   >
                     Cobrar
                   </button>
@@ -268,7 +268,7 @@ export function Clientes() {
                     <div key={v.id} className="venta-tarjeta">
                       <div className="fila">
                         <div style={{ minWidth: 0 }}>
-                          <strong style={{ fontSize: 16, color: 'var(--accent)' }}>{formatearMonto(v.saldo)}</strong>
+                          <strong style={{ fontSize: '1rem', color: 'var(--accent)' }}>{formatearMonto(v.saldo)}</strong>
                           <div className="detalle">
                             {formatearFecha(v.fecha)} · {v.combustible_nombre} · {v.cantidad_litros.toFixed(2)} L
                             {v.cobrado > 0.01 && <> · pagó {formatearMonto(v.cobrado)} de {formatearMonto(v.total)}</>}
@@ -276,7 +276,7 @@ export function Clientes() {
                         </div>
                         <button
                           onClick={() => setCobro({ tipo: 'venta', venta: v })}
-                          style={{ flexShrink: 0, padding: '9px 15px', borderRadius: 8, backgroundColor: 'var(--success)', color: 'white', fontSize: 14 }}
+                          style={{ flexShrink: 0, padding: '9px 15px', borderRadius: 8, backgroundColor: 'var(--success)', color: 'white', fontSize: '0.875rem' }}
                         >
                           Cobrar
                         </button>
@@ -419,7 +419,7 @@ function BorrarClienteModal({ cliente, onCerrar, onConfirmar, borrando }) {
             {cliente.total_compras === 1 ? 'compra registrada' : 'compras registradas'}
             {cliente.debe > 0.5 && <> y debe {formatearMonto(cliente.debe)}</>}.
           </p>
-          <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>
+          <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5 }}>
             No se puede borrar sin perder esas ventas, que forman parte de los registros del negocio.
             Si ya no le vendés, simplemente dejalo sin usar.
           </p>
@@ -527,27 +527,27 @@ function CobroModal({ cobro, fiadosAbiertos, onCerrar, onListo, onError }) {
       <div className="sub-card" style={{ marginBottom: 16 }}>
         {esVenta ? (
           <>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
               {formatearFecha(cobro.venta.fecha)} · {cobro.venta.combustible_nombre} · {cobro.venta.cantidad_litros.toFixed(2)} L
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', marginTop: 3 }}>
+            <div style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--accent)', marginTop: 3 }}>
               Debe {formatearMonto(maximo)}
             </div>
             {cobro.venta.cobrado > 0.01 && (
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)' }}>
                 Ya pagó {formatearMonto(cobro.venta.cobrado)} de {formatearMonto(cobro.venta.total)}
               </div>
             )}
           </>
         ) : (
           <>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
               {fiadosAbiertos.length} {fiadosAbiertos.length === 1 ? 'fiado abierto' : 'fiados abiertos'}
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', marginTop: 3 }}>
+            <div style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--accent)', marginTop: 3 }}>
               Debe {formatearMonto(maximo)}
             </div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)' }}>
               Se salda del más viejo al más nuevo
             </div>
           </>
@@ -564,12 +564,12 @@ function CobroModal({ cobro, fiadosAbiertos, onCerrar, onListo, onError }) {
                 key={p.id}
                 style={{
                   display: 'flex', justifyContent: 'space-between', gap: 10,
-                  padding: '8px 12px', fontSize: 13,
+                  padding: '8px 12px', fontSize: '0.8125rem',
                   borderBottom: i < pagos.length - 1 ? '1px solid var(--border)' : 'none',
                 }}
               >
                 <span><strong style={{ color: 'var(--success)' }}>{formatearMonto(p.monto)}</strong> · {p.metodo_pago}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{formatearFechaHora(p.fecha)}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatearFechaHora(p.fecha)}</span>
               </div>
             ))}
           </div>
@@ -627,7 +627,7 @@ function CobroModal({ cobro, fiadosAbiertos, onCerrar, onListo, onError }) {
                   key={venta.id}
                   style={{
                     display: 'flex', justifyContent: 'space-between', gap: 10,
-                    padding: '8px 12px', fontSize: 13,
+                    padding: '8px 12px', fontSize: '0.8125rem',
                     opacity: aplicado > 0 ? 1 : 0.4,
                     borderBottom: i < cobertura.length - 1 ? '1px solid var(--border)' : 'none',
                   }}
@@ -646,13 +646,13 @@ function CobroModal({ cobro, fiadosAbiertos, onCerrar, onListo, onError }) {
       )}
 
       {montoFinal > 0 && restante > 0.01 && (
-        <div className="sub-card" style={{ marginBottom: 14, fontSize: 14 }}>
+        <div className="sub-card" style={{ marginBottom: 14, fontSize: '0.875rem' }}>
           Después de esto va a seguir debiendo <strong style={{ color: 'var(--accent)' }}>{formatearMonto(restante)}</strong>
         </div>
       )}
 
       {problema && monto !== '' && (
-        <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}>
+        <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: '0.875rem' }}>
           {problema}
         </div>
       )}
@@ -666,7 +666,7 @@ function CobroModal({ cobro, fiadosAbiertos, onCerrar, onListo, onError }) {
         </button>
         <button
           onClick={confirmar} disabled={!!problema || registrando}
-          style={{ flex: 2, padding: 14, borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: 15 }}
+          style={{ flex: 2, padding: 14, borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: '0.9375rem' }}
         >
           {registrando ? 'Registrando…' : `Cobrar ${formatearMonto(montoFinal)}`}
         </button>

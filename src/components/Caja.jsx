@@ -20,10 +20,10 @@ function duracion(desde, hasta = new Date()) {
 function Metrica({ etiqueta, valor, color, chico }) {
   return (
     <div className="card" style={{ padding: 14, flex: '1 1 140px', minWidth: 0 }}>
-      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
+      <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
         {etiqueta}
       </div>
-      <div style={{ fontSize: chico ? 18 : 22, fontWeight: 700, color: color || 'var(--text)', marginTop: 2 }}>
+      <div style={{ fontSize: chico ? '1.125rem' : '1.375rem', fontWeight: 700, color: color || 'var(--text)', marginTop: 2 }}>
         {valor}
       </div>
     </div>
@@ -146,20 +146,20 @@ export function Caja() {
           <div className="vacio">Cargando…</div>
         ) : !abierta ? (
           <div className="card" style={{ textAlign: 'center', padding: 36 }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🏦</div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>No hay ninguna caja abierta</h2>
+            <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>🏦</div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 8 }}>No hay ninguna caja abierta</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 22, lineHeight: 1.5, maxWidth: 380, marginInline: 'auto' }}>
               Abrí la caja al empezar el turno. Todo lo que vendas y cobres desde ese momento
               queda dentro, hasta que la cierres.
             </p>
             <button
               onClick={() => { setNotas(''); setFondo(''); setModalAbrir(true); }}
-              style={{ padding: '15px 34px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: 16 }}
+              style={{ padding: '15px 34px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: '1rem' }}
             >
               Abrir caja
             </button>
             {historial.length > 0 && (
-              <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 18 }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: 18 }}>
                 La última se cerró el {formatearFechaHora(historial[0].cerrada_en)}
               </p>
             )}
@@ -217,19 +217,19 @@ export function Caja() {
       <Modal abierto={modalCerrar} onCerrar={() => setModalCerrar(false)} titulo="Cerrar caja" ancho={460}>
         {resumen && (
           <>
-            <p style={{ marginBottom: 14, color: 'var(--text-secondary)', lineHeight: 1.5, fontSize: 14 }}>
+            <p style={{ marginBottom: 14, color: 'var(--text-secondary)', lineHeight: 1.5, fontSize: '0.875rem' }}>
               Estos números quedan guardados como el registro del turno y no cambian después,
               aunque se edite alguna venta.
             </p>
 
             <div className="sub-card" style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 700 }}>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-secondary)', fontWeight: 700 }}>
                 TIENE QUE HABER EN EL CAJÓN
               </div>
-              <div style={{ fontSize: 30, fontWeight: 700, color: 'var(--success)' }}>
+              <div style={{ fontSize: '1.875rem', fontWeight: 700, color: 'var(--success)' }}>
                 {formatearMonto(resumen.efectivoEnCaja)}
               </div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.45 }}>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.45 }}>
                 {resumen.fondoInicial > 0 && <>{formatearMonto(resumen.fondoInicial)} de fondo + </>}
                 {formatearMonto(resumen.totalEfectivo)} de ventas
                 {resumen.fiadoCobradoEfectivo > 0 && (
@@ -286,7 +286,7 @@ export function Caja() {
               </button>
               <button
                 onClick={cerrar} disabled={procesando}
-                style={{ flex: 2, padding: 14, borderRadius: 'var(--radius)', backgroundColor: 'var(--danger)', color: 'white', fontWeight: 700, fontSize: 15 }}
+                style={{ flex: 2, padding: 14, borderRadius: 'var(--radius)', backgroundColor: 'var(--danger)', color: 'white', fontWeight: 700, fontSize: '0.9375rem' }}
               >
                 {procesando ? 'Cerrando…' : 'Cerrar caja'}
               </button>
@@ -358,18 +358,18 @@ function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', backgroundColor: 'var(--success)', display: 'inline-block' }} />
-            <strong style={{ fontSize: 16 }}>Caja abierta</strong>
+            <strong style={{ fontSize: '1rem' }}>Caja abierta</strong>
           </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginTop: 3 }}>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem', marginTop: 3 }}>
             Desde {formatearFechaHora(sesion.abierta_en)} · hace {duracion(sesion.abierta_en)}
           </div>
           {sesion.notas_apertura && (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 3 }}>{sesion.notas_apertura}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: 3 }}>{sesion.notas_apertura}</div>
           )}
         </div>
         <button
           onClick={onCerrar}
-          style={{ padding: '13px 24px', borderRadius: 'var(--radius)', backgroundColor: 'var(--danger)', color: 'white', fontWeight: 700, fontSize: 15 }}
+          style={{ padding: '13px 24px', borderRadius: 'var(--radius)', backgroundColor: 'var(--danger)', color: 'white', fontWeight: 700, fontSize: '0.9375rem' }}
         >
           Cerrar caja
         </button>
@@ -377,13 +377,13 @@ function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
 
       {/* En el cajón */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
+        <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
           TIENE QUE HABER EN EL CAJÓN
         </div>
-        <div style={{ fontSize: 34, fontWeight: 700, color: 'var(--success)' }}>
+        <div style={{ fontSize: '2.125rem', fontWeight: 700, color: 'var(--success)' }}>
           {formatearMonto(resumen.efectivoEnCaja)}
         </div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
+        <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 2 }}>
           {resumen.fondoInicial > 0 && <>{formatearMonto(resumen.fondoInicial)} de fondo + </>}
           {formatearMonto(resumen.totalEfectivo)} de ventas
           {resumen.fiadoCobradoEfectivo > 0 && <> + {formatearMonto(resumen.fiadoCobradoEfectivo)} de fiados cobrados</>}
@@ -402,14 +402,14 @@ function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
 
       {litros.length > 0 && (
         <div className="card" style={{ marginBottom: 16, padding: 14 }}>
-          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em', marginBottom: 7 }}>
+          <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em', marginBottom: 7 }}>
             DESPACHADO
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
             {litros.map(([nombre, l]) => (
               <div key={nombre}>
-                <span style={{ fontSize: 17, fontWeight: 700 }}>{l.toFixed(2)} L</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: 13.5 }}> de {nombre}</span>
+                <span style={{ fontSize: '1.0625rem', fontWeight: 700 }}>{l.toFixed(2)} L</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem' }}> de {nombre}</span>
               </div>
             ))}
           </div>
@@ -425,7 +425,7 @@ function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
             <div key={`${m.tipo}-${m.dato.id}`} className="venta-tarjeta">
               <div className="fila">
                 <div style={{ minWidth: 0 }}>
-                  <strong style={{ fontSize: 15.5 }}>{formatearMonto(m.tipo === 'venta' ? m.dato.total : m.dato.monto)}</strong>
+                  <strong style={{ fontSize: '0.9688rem' }}>{formatearMonto(m.tipo === 'venta' ? m.dato.total : m.dato.monto)}</strong>
                   <div className="detalle">
                     {formatearHora(m.fecha)}
                     {m.tipo === 'venta' ? (
@@ -481,7 +481,7 @@ function Historial({ historial, cargando, onVer }) {
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
             <div style={{ fontWeight: 700 }}>{formatearMonto(s.total_cobrado)}</div>
             {Number(s.total_fiado_nuevo) > 0 && (
-              <div style={{ fontSize: 12, color: 'var(--accent)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>
                 {formatearMonto(s.total_fiado_nuevo)} fiado
               </div>
             )}
@@ -489,7 +489,7 @@ function Historial({ historial, cargando, onVer }) {
               const dif = Number(s.efectivo_contado) - Number(s.efectivo_esperado || 0);
               const cuadra = Math.abs(dif) < 0.01;
               return (
-                <div style={{ fontSize: 12, marginTop: 2, color: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)' }}>
+                <div style={{ fontSize: '0.75rem', marginTop: 2, color: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)' }}>
                   {cuadra ? 'cuadró' : dif > 0 ? `sobró ${formatearMonto(dif)}` : `faltó ${formatearMonto(-dif)}`}
                 </div>
               );
@@ -516,13 +516,13 @@ function DetalleSesion({ sesion, datos }) {
 
   return (
     <>
-      <div style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginBottom: 14 }}>
+      <div style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem', marginBottom: 14 }}>
         {formatearFechaHora(sesion.abierta_en)} → {formatearFechaHora(sesion.cerrada_en)}
         {' · '}{duracion(sesion.abierta_en, sesion.cerrada_en)}
       </div>
 
       {(sesion.notas_apertura || sesion.notas_cierre) && (
-        <div className="sub-card" style={{ marginBottom: 14, fontSize: 14 }}>
+        <div className="sub-card" style={{ marginBottom: 14, fontSize: '0.875rem' }}>
           {sesion.notas_apertura && <div>Apertura: {sesion.notas_apertura}</div>}
           {sesion.notas_cierre && <div>Cierre: {sesion.notas_cierre}</div>}
         </div>
@@ -539,14 +539,14 @@ function DetalleSesion({ sesion, datos }) {
             className="sub-card"
             style={{ marginBottom: 14, borderColor: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)' }}
           >
-            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 4 }}>ARQUEO</div>
-            <div style={{ fontSize: 14 }}>
+            <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 4 }}>ARQUEO</div>
+            <div style={{ fontSize: '0.875rem' }}>
               Tenía que haber <strong>{formatearMonto(esperado)}</strong> · contó{' '}
               <strong>{formatearMonto(contado)}</strong>
             </div>
             <div
               style={{
-                fontSize: 17, fontWeight: 700, marginTop: 4,
+                fontSize: '1.0625rem', fontWeight: 700, marginTop: 4,
                 color: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)',
               }}
             >
@@ -572,9 +572,9 @@ function DetalleSesion({ sesion, datos }) {
 
       {Object.keys(litros).length > 0 && (
         <div className="sub-card" style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 6 }}>DESPACHADO</div>
+          <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 6 }}>DESPACHADO</div>
           {Object.entries(litros).map(([nombre, l]) => (
-            <div key={nombre} style={{ fontSize: 14.5 }}>
+            <div key={nombre} style={{ fontSize: '0.9062rem' }}>
               <strong>{Number(l).toFixed(2)} L</strong> de {nombre}
             </div>
           ))}

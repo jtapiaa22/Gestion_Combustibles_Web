@@ -108,8 +108,8 @@ export function Stock() {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>VALOR DEL TANQUE</div>
-              <div style={{ fontSize: 23, fontWeight: 700 }}>{formatearMonto(valorTanque)}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>VALOR DEL TANQUE</div>
+              <div style={{ fontSize: '1.4375rem', fontWeight: 700 }}>{formatearMonto(valorTanque)}</div>
             </div>
             <button
               onClick={() => setFormCombustible({ nombre: '', precio: '', orden: activos.length + 1 })}
@@ -138,19 +138,19 @@ export function Stock() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                          <h3 style={{ fontSize: 18, fontWeight: 700 }}>{c.nombre}</h3>
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: 700 }}>{c.nombre}</h3>
                           {bajo && (
                             <span className="badge" style={{ backgroundColor: 'var(--accent)', color: '#1C1917' }}>
                               Stock bajo
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: 19, marginTop: 5 }}>
+                        <div style={{ fontSize: '1.1875rem', marginTop: 5 }}>
                           <strong>{c.cantidad_litros.toFixed(2)} L</strong>
                           <span style={{ color: 'var(--text-secondary)' }}> · </span>
                           <strong style={{ color: 'var(--accent)' }}>{formatearMonto(c.precio_por_litro)}/L</strong>
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 3 }}>
                           Actualizado {formatearFechaHora(c.ultima_actualizacion)}
                         </div>
                       </div>
@@ -158,7 +158,7 @@ export function Stock() {
                       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                         <button
                           onClick={() => setCambioPrecio({ combustible: c })}
-                          style={{ padding: '9px 15px', borderRadius: 8, backgroundColor: 'var(--accent)', color: '#1C1917', fontSize: 14 }}
+                          style={{ padding: '9px 15px', borderRadius: 8, backgroundColor: 'var(--accent)', color: '#1C1917', fontSize: '0.875rem' }}
                         >
                           Precio
                         </button>
@@ -231,7 +231,7 @@ export function Stock() {
             <p style={{ marginBottom: 16, lineHeight: 1.5 }}>
               <strong>{aDesactivar.nombre}</strong> va a dejar de aparecer cuando cargues una venta.
             </p>
-            <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>
+            <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5 }}>
               No se borra: las ventas y compras que ya tiene se conservan, y podés reactivarlo cuando quieras.
               {aDesactivar.cantidad_litros > 0.01 && (
                 <><br /><br />
@@ -386,8 +386,8 @@ function CambioPrecioModal({ datos, onCerrar, onListo, onError }) {
   return (
     <Modal abierto onCerrar={onCerrar} titulo={`Precio de ${c.nombre}`} ancho={480}>
       <div className="sub-card" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 600 }}>PRECIO ACTUAL</div>
-        <div style={{ fontSize: 24, fontWeight: 700 }}>{formatearMonto(c.precio_por_litro)} por litro</div>
+        <div style={{ fontSize: '0.7812rem', color: 'var(--text-secondary)', fontWeight: 600 }}>PRECIO ACTUAL</div>
+        <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatearMonto(c.precio_por_litro)} por litro</div>
       </div>
 
       <div className="campo">
@@ -407,7 +407,7 @@ function CambioPrecioModal({ datos, onCerrar, onListo, onError }) {
       {sospechoso && (
         <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)' }}>
           <strong style={{ color: 'var(--danger)' }}>Revisá bien ese número</strong>
-          <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.45 }}>
+          <div style={{ fontSize: '0.8438rem', color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.45 }}>
             Es muy distinto al actual ({formatearMonto(c.precio_por_litro)}). Si te faltó o te sobró un cero,
             la deuda de los fiados se va a mover mucho.
           </div>
@@ -419,7 +419,7 @@ function CambioPrecioModal({ datos, onCerrar, onListo, onError }) {
 
       {simulacion && !simulando && (
         simulacion.afectados.length === 0 ? (
-          <div className="sub-card" style={{ marginBottom: 14, fontSize: 14 }}>
+          <div className="sub-card" style={{ marginBottom: 14, fontSize: '0.875rem' }}>
             No hay fiados abiertos de {c.nombre}: no cambia la deuda de nadie.
           </div>
         ) : (
@@ -431,7 +431,7 @@ function CambioPrecioModal({ datos, onCerrar, onListo, onError }) {
                   key={a.clienteId}
                   style={{
                     display: 'flex', justifyContent: 'space-between', gap: 10,
-                    padding: '9px 12px', fontSize: 13.5,
+                    padding: '9px 12px', fontSize: '0.8438rem',
                     borderBottom: i < simulacion.afectados.length - 1 ? '1px solid var(--border)' : 'none',
                   }}
                 >
@@ -561,7 +561,7 @@ function ComprasVista({ combustibles, compras, cargando, onRegistrada, onError }
         {margen !== null && litros > 0 && (
           <div
             className="sub-card"
-            style={{ marginBottom: 14, fontSize: 14, borderColor: margen <= 0 ? 'var(--danger)' : 'var(--border)' }}
+            style={{ marginBottom: 14, fontSize: '0.875rem', borderColor: margen <= 0 ? 'var(--danger)' : 'var(--border)' }}
           >
             {margen > 0 ? (
               <>Ganás <strong style={{ color: 'var(--success)' }}>{formatearMonto(margen)}</strong> por litro
@@ -578,7 +578,7 @@ function ComprasVista({ combustibles, compras, cargando, onRegistrada, onError }
         <button
           onClick={() => setConfirmando(true)}
           disabled={!elegido || litros <= 0 || precioCompra <= 0}
-          style={{ width: '100%', padding: 15, borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: 15 }}
+          style={{ width: '100%', padding: 15, borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: '0.9375rem' }}
         >
           Registrar compra
         </button>
@@ -616,16 +616,16 @@ function ComprasVista({ combustibles, compras, cargando, onRegistrada, onError }
         {elegido && (
           <>
             <div className="sub-card" style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 15, marginBottom: 6 }}>
+              <div style={{ fontSize: '0.9375rem', marginBottom: 6 }}>
                 <strong>{litros.toFixed(2)} L</strong> de <strong>{elegido.nombre}</strong>
               </div>
-              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: '0.8438rem', color: 'var(--text-secondary)' }}>
                 a {formatearMonto(precioCompra)} por litro
               </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', marginTop: 8 }}>
+              <div style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--accent)', marginTop: 8 }}>
                 {formatearMonto(total)}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 8 }}>
                 El tanque pasa de {elegido.cantidad_litros.toFixed(2)} L a{' '}
                 <strong style={{ color: 'var(--text)' }}>{(elegido.cantidad_litros + litros).toFixed(2)} L</strong>
               </div>

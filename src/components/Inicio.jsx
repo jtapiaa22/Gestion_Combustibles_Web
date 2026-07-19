@@ -17,14 +17,14 @@ function Tarjeta({ etiqueta, valor, detalle, color, onClick }) {
         cursor: onClick ? 'pointer' : 'default', color: 'var(--text)',
       }}
     >
-      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
+      <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
         {etiqueta}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text)', marginTop: 2, lineHeight: 1.1 }}>
+      <div style={{ fontSize: '1.625rem', fontWeight: 700, color: color || 'var(--text)', marginTop: 2, lineHeight: 1.1 }}>
         {valor}
       </div>
       {detalle && (
-        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>{detalle}</div>
+        <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 4 }}>{detalle}</div>
       )}
     </Elemento>
   );
@@ -74,8 +74,8 @@ export function Inicio({ irA }) {
       <Notificacion />
 
       <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700 }}>Hoy</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14, textTransform: 'capitalize' }}>{fechaLarga}</p>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Hoy</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textTransform: 'capitalize' }}>{fechaLarga}</p>
       </div>
 
       {/* Estado de la caja: lo primero que hay que saber al llegar */}
@@ -96,10 +96,10 @@ export function Inicio({ irA }) {
             }}
           />
           <div>
-            <strong style={{ fontSize: 15.5 }}>
+            <strong style={{ fontSize: '0.9688rem' }}>
               {datos.caja ? 'Caja abierta' : 'No hay caja abierta'}
             </strong>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
               {datos.caja
                 ? `Desde ${formatearFecha(datos.caja.abierta_en)} a las ${formatearHora(datos.caja.abierta_en)}`
                 : 'Abrila para empezar el turno'}
@@ -146,7 +146,7 @@ export function Inicio({ irA }) {
       </div>
 
       {bajos.length > 0 && (
-        <div className="sub-card" style={{ marginBottom: 18, borderColor: 'var(--accent)', fontSize: 14 }}>
+        <div className="sub-card" style={{ marginBottom: 18, borderColor: 'var(--accent)', fontSize: '0.875rem' }}>
           Queda poco de <strong>{bajos.map((c) => c.nombre).join(', ')}</strong>. Conviene reponer.
         </div>
       )}
@@ -161,7 +161,7 @@ export function Inicio({ irA }) {
             <div key={v.id} className="venta-tarjeta">
               <div className="fila">
                 <div style={{ minWidth: 0 }}>
-                  <strong style={{ fontSize: 15.5 }}>{formatearMonto(v.total)}</strong>
+                  <strong style={{ fontSize: '0.9688rem' }}>{formatearMonto(v.total)}</strong>
                   <div className="detalle">
                     {esHoy(v.fecha) ? formatearHora(v.fecha) : formatearFecha(v.fecha)}
                     {' · '}{v.combustible_nombre} · {v.cantidad_litros.toFixed(2)} L

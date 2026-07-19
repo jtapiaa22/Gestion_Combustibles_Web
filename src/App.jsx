@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase.js';
-import { TemaProvider, useTema } from './hooks/useTema.jsx';
+import { AjustesProvider, useAjustes } from './hooks/useAjustes.jsx';
 import { Login } from './components/Login.jsx';
 import { Ventas } from './components/Ventas.jsx';
 import { Clientes } from './components/Clientes.jsx';
@@ -19,7 +19,7 @@ const SECCIONES = [
 ];
 
 function AppAutenticada() {
-  const { tema, alternar } = useTema();
+  const { tema, alternarTema, escalaActual, siguienteEscala } = useAjustes();
   const [seccion, setSeccion] = useState('ventas');
 
   return (
@@ -30,7 +30,16 @@ function AppAutenticada() {
           <span className="nombre">Gestión Combustibles</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="theme-toggle" onClick={alternar} title="Cambiar tema">
+          <button
+            className="theme-toggle"
+            onClick={siguienteEscala}
+            title={`Tamaño de letra: ${escalaActual.etiqueta}`}
+            aria-label={`Tamaño de letra: ${escalaActual.etiqueta}. Tocar para cambiar.`}
+          >
+            <span style={{ fontSize: '0.75rem' }}>A</span>
+            <span style={{ fontSize: '1.05rem', marginLeft: 1 }}>A</span>
+          </button>
+          <button className="theme-toggle" onClick={alternarTema} title="Cambiar tema">
             {tema === 'dark' ? '☀️' : '🌙'}
           </button>
           <button
@@ -85,7 +94,7 @@ export default function App() {
   }, []);
 
   return (
-    <TemaProvider>
+    <AjustesProvider>
       {sesion === undefined ? (
         <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', color: 'var(--text-muted)' }}>
           Cargando…
@@ -95,6 +104,6 @@ export default function App() {
       ) : (
         <Login />
       )}
-    </TemaProvider>
+    </AjustesProvider>
   );
 }

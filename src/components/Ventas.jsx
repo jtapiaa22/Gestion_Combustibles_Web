@@ -257,7 +257,7 @@ export function Ventas() {
           {/* Transferencia */}
           {form.cobro === 'Transferencia' && (
             <div className="sub-card campo">
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
                 Quién transfiere
               </label>
               <input
@@ -273,7 +273,7 @@ export function Ventas() {
           {/* Fiado: a quién */}
           {esFiado && (
             <div className="sub-card campo">
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
                 A quién se le fía
               </label>
               <select
@@ -342,7 +342,7 @@ export function Ventas() {
           {/* Vuelto */}
           {form.cobro === 'Efectivo' && total > 0 && (
             <div className="sub-card campo">
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: '0.8125rem' }}>
                 Con cuánto paga
               </label>
               <input
@@ -366,7 +366,7 @@ export function Ventas() {
           {problema && (
             <div
               className="sub-card"
-              style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}
+              style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: '0.875rem' }}
             >
               {problema}
             </div>
@@ -377,7 +377,7 @@ export function Ventas() {
           {!cargando && !caja && (
             <div className="sub-card" style={{ marginBottom: 12, borderColor: 'var(--accent)' }}>
               <strong style={{ color: 'var(--accent)' }}>No hay caja abierta</strong>
-              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.45 }}>
+              <div style={{ fontSize: '0.8438rem', color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.45 }}>
                 Se va a abrir ahora junto con esta venta, así queda dentro del turno.
               </div>
             </div>
@@ -387,7 +387,7 @@ export function Ventas() {
             onClick={registrar}
             disabled={!puedeRegistrar}
             style={{
-              width: '100%', padding: 16, fontSize: 17, fontWeight: 700,
+              width: '100%', padding: 16, fontSize: '1.0625rem', fontWeight: 700,
               borderRadius: 'var(--radius)',
               backgroundColor: esFiado ? 'var(--accent-dark)' : 'var(--success)',
               color: 'white',
@@ -406,7 +406,7 @@ export function Ventas() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
             <h2 className="titulo-seccion">Hoy</h2>
             {ventasHoy.length > 0 && (
-              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: '0.8438rem', color: 'var(--text-secondary)' }}>
                 Cobrado <strong style={{ color: 'var(--success)' }}>{formatearMonto(cobradoHoy)}</strong>
                 {fiadoHoy > 0 && (
                   <> · Fiado <strong style={{ color: 'var(--accent)' }}>{formatearMonto(fiadoHoy)}</strong></>
@@ -451,7 +451,7 @@ export function Ventas() {
               {ventasHoy.map((v) => (
                 <div key={v.id} className="venta-tarjeta">
                   <div className="fila">
-                    <strong style={{ fontSize: 16 }}>{formatearMonto(v.total)}</strong>
+                    <strong style={{ fontSize: '1rem' }}>{formatearMonto(v.total)}</strong>
                     {v.es_fiado ? (
                       <span className="badge" style={{ backgroundColor: 'var(--accent-dark)' }}>Fiado</span>
                     ) : (

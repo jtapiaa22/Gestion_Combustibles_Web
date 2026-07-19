@@ -26,7 +26,7 @@ export function Modal({ abierto, onCerrar, titulo, children, ancho = 460 }) {
       <div className="modal-caja" style={{ maxWidth: ancho }} role="dialog" aria-modal="true" aria-label={titulo}>
         {titulo && (
           <div className="modal-cabecera">
-            <h2 className="titulo-seccion" style={{ fontSize: 16 }}>{titulo}</h2>
+            <h2 className="titulo-seccion" style={{ fontSize: '1rem' }}>{titulo}</h2>
             <button className="modal-cerrar" onClick={onCerrar} aria-label="Cerrar">✕</button>
           </div>
         )}

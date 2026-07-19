@@ -25,8 +25,8 @@ export function Login() {
     <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 20 }}>
       <form onSubmit={entrar} className="card" style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
-          <div style={{ fontSize: 38 }}>⛽</div>
-          <h1 className="titulo-seccion" style={{ fontSize: 19, marginTop: 6 }}>Gestión Combustibles</h1>
+          <div style={{ fontSize: '2.375rem' }}>⛽</div>
+          <h1 className="titulo-seccion" style={{ fontSize: '1.1875rem', marginTop: 6 }}>Gestión Combustibles</h1>
         </div>
 
         <div className="campo">
@@ -46,19 +46,19 @@ export function Login() {
         </div>
 
         {error && (
-          <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}>
+          <div className="sub-card" style={{ marginBottom: 14, borderColor: 'var(--danger)', color: 'var(--danger)', fontWeight: 600, fontSize: '0.875rem' }}>
             {error}
           </div>
         )}
 
         <button
           type="submit" disabled={entrando}
-          style={{ width: '100%', padding: 15, fontSize: 16, fontWeight: 700, borderRadius: 'var(--radius)', backgroundColor: 'var(--accent)', color: '#1C1917' }}
+          style={{ width: '100%', padding: 15, fontSize: '1rem', fontWeight: 700, borderRadius: 'var(--radius)', backgroundColor: 'var(--accent)', color: '#1C1917' }}
         >
           {entrando ? 'Entrando…' : 'Entrar'}
         </button>
 
-        <p style={{ marginTop: 14, fontSize: 12.5, color: 'var(--text-muted)', textAlign: 'center' }}>
+        <p style={{ marginTop: 14, fontSize: '0.7812rem', color: 'var(--text-muted)', textAlign: 'center' }}>
           Queda la sesión iniciada: no hace falta volver a entrar.
         </p>
       </form>
