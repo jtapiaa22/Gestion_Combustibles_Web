@@ -4,6 +4,7 @@ import { TemaProvider, useTema } from './hooks/useTema.jsx';
 import { Login } from './components/Login.jsx';
 import { Ventas } from './components/Ventas.jsx';
 import { Clientes } from './components/Clientes.jsx';
+import { Stock } from './components/Stock.jsx';
 
 const SECCIONES = [
   { id: 'ventas',   etiqueta: 'Ventas',   icono: '⛽' },
@@ -67,6 +68,8 @@ function AppAutenticada() {
           <Ventas />
         ) : seccion === 'clientes' ? (
           <Clientes />
+        ) : seccion === 'stock' ? (
+          <Stock />
         ) : (
           <EnConstruccion nombre={SECCIONES.find((s) => s.id === seccion)?.etiqueta} />
         )}

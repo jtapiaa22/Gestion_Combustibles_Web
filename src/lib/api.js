@@ -117,6 +117,50 @@ export const combustiblesAPI = {
   },
 
   /**
+   * Qué le pasaría a las deudas si el precio cambiara a este valor.
+   * Cambiar el precio mueve plata que la gente debe, así que la
+   * pantalla lo muestra ANTES de confirmar en vez de después.
+   */
+  simularCambioPrecio: async (id, nuevoPrecio) => {
+    const abiertos = ventas(
+      alzar(
+        await supabase
+          .from('v_ventas')
+          .select('*')
+          .eq('combustible_id', id)
+          .eq('es_fiado', true)
+          .eq('pagado', false)
+      )
+    );
+
+    const porCliente = new Map();
+    for (const v of abiertos) {
+      const saldoNuevo = Math.max(0, v.cantidad_litros * nuevoPrecio - v.cobrado);
+      const actual = porCliente.get(v.cliente_id) || {
+        clienteId: v.cliente_id,
+        nombre: v.cliente_nombre || 'Sin cliente',
+        antes: 0,
+        despues: 0,
+      };
+      actual.antes += v.saldo;
+      actual.despues += saldoNuevo;
+      porCliente.set(v.cliente_id, actual);
+    }
+
+    const afectados = [...porCliente.values()]
+      .map((c) => ({ ...c, diferencia: c.despues - c.antes }))
+      .filter((c) => Math.abs(c.diferencia) > 0.01)
+      .sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia));
+
+    return {
+      fiados: abiertos.length,
+      afectados,
+      totalAntes: afectados.reduce((s, c) => s + c.antes, 0),
+      totalDespues: afectados.reduce((s, c) => s + c.despues, 0),
+    };
+  },
+
+  /**
    * Un fiado está denominado en litros, no en pesos: si sube el
    * surtidor, sube lo que debe el que se llevó fiado.
    *

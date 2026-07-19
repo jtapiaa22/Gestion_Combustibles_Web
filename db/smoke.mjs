@@ -115,6 +115,15 @@ try {
   const contadoTrasPrecio = await ventasAPI.obtenerUna(contado.id);
   check('la venta ya cobrada NO se revalúa', cerca(contadoTrasPrecio.total, 1000), `total=${contadoTrasPrecio.total}`);
 
+  // La simulación tiene que anticipar exactamente lo que después pasa
+  const sim = await combustiblesAPI.simularCambioPrecio(nafta0.id, 300);
+  const simCli = sim.afectados.find((a) => a.clienteId === cli.id);
+  check('la simulación anticipa la deuda del cliente',
+    simCli && cerca(simCli.antes, 3500) && cerca(simCli.despues, 5500),
+    simCli ? `antes=${simCli.antes} después=${simCli.despues}` : 'no aparece en la simulación');
+  check('la simulación no escribe nada',
+    cerca((await ventasAPI.obtenerUna(fiado.id)).saldo, 3500));
+
   // ── El caso del precio mal tipeado ────────────────────────
   // Un precio absurdamente bajo hace que lo ya cobrado supere el
   // total. Antes eso daba el fiado por saldado, y al corregir el
