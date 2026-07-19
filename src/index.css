@@ -313,6 +313,85 @@ tbody tr:nth-child(even) td { background-color: var(--surface-2); }
   .ventas-layout { grid-template-columns: 420px minmax(0, 1fr); }
 }
 
+/* ═══════════════ MODAL ═══════════════ */
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  z-index: 9000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  overscroll-behavior: contain;
+}
+.modal-caja {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-height: 92dvh;
+  display: flex;
+  flex-direction: column;
+  animation: subir 0.2s ease;
+}
+@keyframes subir { from { transform: translateY(14px); opacity: 0.6; } to { transform: translateY(0); opacity: 1; } }
+
+.modal-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-cerrar {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 32px; height: 32px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.modal-cuerpo {
+  padding: 18px;
+  overflow-y: auto;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 700px) {
+  .modal-fondo { align-items: center; padding: 20px; }
+  .modal-caja { border-radius: var(--radius-lg); max-height: 88vh; }
+}
+
+/* ═══════════════ MAESTRO-DETALLE ═══════════════ */
+.md-layout { display: grid; gap: 18px; align-items: start; }
+@media (min-width: 900px) {
+  .md-layout { grid-template-columns: 370px minmax(0, 1fr); }
+}
+
+.fila-cliente {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+.fila-cliente:hover { border-color: var(--border-strong); }
+.fila-cliente.activo { border-color: var(--accent); background-color: var(--surface-2); }
+.fila-cliente .nombre { font-weight: 600; font-size: 15px; }
+.fila-cliente .sub { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+
 /* ═══════════════ TOAST ═══════════════ */
 .toast {
   position: fixed;

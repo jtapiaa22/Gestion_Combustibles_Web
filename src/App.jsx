@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase.js';
 import { TemaProvider, useTema } from './hooks/useTema.jsx';
 import { Login } from './components/Login.jsx';
 import { Ventas } from './components/Ventas.jsx';
+import { Clientes } from './components/Clientes.jsx';
 
 const SECCIONES = [
   { id: 'ventas',   etiqueta: 'Ventas',   icono: '⛽' },
@@ -64,6 +65,8 @@ function AppAutenticada() {
       <main className="app-main">
         {seccion === 'ventas' ? (
           <Ventas />
+        ) : seccion === 'clientes' ? (
+          <Clientes />
         ) : (
           <EnConstruccion nombre={SECCIONES.find((s) => s.id === seccion)?.etiqueta} />
         )}
