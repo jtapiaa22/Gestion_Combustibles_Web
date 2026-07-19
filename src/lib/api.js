@@ -602,7 +602,7 @@ const costosPorCombustible = async () => {
  * Totales de un período. Antes esta misma cuenta estaba copiada en
  * tres funciones y las tres se habían ido separando entre sí.
  */
-async function calcularTotales(desde, hasta) {
+async function calcularTotales(desde, hasta, fondoInicial = 0) {
   const [ventasRaw, pagosRaw, costos] = await Promise.all([
     supabase.from('v_ventas').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
     supabase.from('pagos_fiado').select('*, clientes(nombre)').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
@@ -652,9 +652,10 @@ async function calcularTotales(desde, hasta) {
     totalFiadoCobrado: fiadoEfectivo + fiadoTransferencia,
     fiadoCobradoEfectivo: fiadoEfectivo,
     fiadoCobradoTransferencia: fiadoTransferencia,
-    // Lo que tiene que haber en el cajón: ventas en efectivo más
-    // fiados cobrados en efectivo.
-    efectivoEnCaja: totalEfectivo + fiadoEfectivo,
+    fondoInicial,
+    // Lo que tiene que haber en el cajón: el fondo que quedó de antes,
+    // más las ventas en efectivo, más los fiados cobrados en efectivo.
+    efectivoEnCaja: fondoInicial + totalEfectivo + fiadoEfectivo,
     litrosPorCombustible,
     ganancia: totalCobrado - costoVendido,
     cantidadVentas: lista.length,
@@ -663,11 +664,19 @@ async function calcularTotales(desde, hasta) {
 }
 
 export const cajaAPI = {
-  /** Una sola caja abierta a la vez: lo garantiza un índice único. */
-  abrirCaja: async (notas) => {
+  /**
+   * Una sola caja abierta a la vez: lo garantiza un índice único.
+   * El fondo es la plata que queda en el cajón para dar vuelto; sin
+   * contarla, lo que "tiene que haber" al cerrar siempre da de menos.
+   */
+  abrirCaja: async (notas, fondoInicial = 0) => {
     const { data, error } = await supabase
       .from('sesiones_caja')
-      .insert({ abierta_en: ahora(), notas_apertura: notas || null })
+      .insert({
+        abierta_en: ahora(),
+        notas_apertura: notas || null,
+        fondo_inicial: fondoInicial || 0,
+      })
       .select()
       .single();
     if (error?.code === '23505') throw new Error('Ya hay una caja abierta');
@@ -675,14 +684,30 @@ export const cajaAPI = {
     return data;
   },
 
-  cerrarCaja: async (id, notas) => {
+  /** El fondo se puede corregir mientras la caja sigue abierta. */
+  actualizarFondo: async (id, fondoInicial) => {
+    alzar(
+      await supabase
+        .from('sesiones_caja')
+        .update({ fondo_inicial: fondoInicial || 0 })
+        .eq('id', id)
+        .is('cerrada_en', null)
+        .select('id')
+    );
+  },
+
+  /**
+   * @param efectivoContado lo que se contó de verdad en el cajón.
+   *        Null si no se hizo arqueo: no se inventa un número.
+   */
+  cerrarCaja: async (id, notas, efectivoContado = null) => {
     const sesion = alzar(
       await supabase.from('sesiones_caja').select('*').eq('id', id).is('cerrada_en', null).maybeSingle()
     );
     if (!sesion) throw new Error('No se encontró la sesión o ya está cerrada');
 
     const cerradaEn = ahora();
-    const t = await calcularTotales(sesion.abierta_en, cerradaEn);
+    const t = await calcularTotales(sesion.abierta_en, cerradaEn, num(sesion.fondo_inicial));
 
     alzar(
       await supabase
@@ -695,6 +720,8 @@ export const cajaAPI = {
           total_fiado_nuevo: t.totalFiadoNuevo,
           total_fiado_cobrado: t.totalFiadoCobrado,
           total_cobrado: t.totalCobrado,
+          efectivo_esperado: t.efectivoEnCaja,
+          efectivo_contado: efectivoContado,
           litros_por_combustible: t.litrosPorCombustible,
           cantidad_ventas: t.cantidadVentas,
           cantidad_ventas_fiado: t.cantidadFiados,
@@ -726,7 +753,10 @@ export const cajaAPI = {
   obtenerResumen: async (idSesion) => {
     const sesion = alzar(await supabase.from('sesiones_caja').select('*').eq('id', idSesion).maybeSingle());
     if (!sesion) return null;
-    return { sesion, ...(await calcularTotales(sesion.abierta_en, sesion.cerrada_en || ahora())) };
+    return {
+      sesion,
+      ...(await calcularTotales(sesion.abierta_en, sesion.cerrada_en || ahora(), num(sesion.fondo_inicial))),
+    };
   },
 
   obtenerHistorial: async () =>

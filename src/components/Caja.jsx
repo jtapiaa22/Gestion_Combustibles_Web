@@ -42,6 +42,9 @@ export function Caja() {
   const [modalAbrir, setModalAbrir] = useState(false);
   const [modalCerrar, setModalCerrar] = useState(false);
   const [notas, setNotas] = useState('');
+  const [fondo, setFondo] = useState('');
+  const [contado, setContado] = useState('');
+  const [modalFondo, setModalFondo] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [detalle, setDetalle] = useState(null);
 
@@ -72,9 +75,9 @@ export function Caja() {
   const abrir = async () => {
     setProcesando(true);
     try {
-      await cajaAPI.abrirCaja(notas);
+      await cajaAPI.abrirCaja(notas, parseFloat(fondo) || 0);
       mostrar('Caja abierta');
-      setModalAbrir(false); setNotas('');
+      setModalAbrir(false); setNotas(''); setFondo('');
       await cargar();
     } catch (e) {
       mostrar(e.message, 'error');
@@ -86,11 +89,28 @@ export function Caja() {
   const cerrar = async () => {
     setProcesando(true);
     try {
-      await cajaAPI.cerrarCaja(abierta.id, notas);
+      // Sin arqueo se guarda null, no un cero: "no conté" y "conté
+      // cero" no son lo mismo.
+      const contadoNum = contado.trim() === '' ? null : parseFloat(contado);
+      await cajaAPI.cerrarCaja(abierta.id, notas, contadoNum);
       mostrar('Caja cerrada');
-      setModalCerrar(false); setNotas('');
+      setModalCerrar(false); setNotas(''); setContado('');
       await cargar();
       setTab('historial');
+    } catch (e) {
+      mostrar(e.message, 'error');
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const guardarFondo = async () => {
+    setProcesando(true);
+    try {
+      await cajaAPI.actualizarFondo(abierta.id, parseFloat(fondo) || 0);
+      mostrar('Fondo actualizado');
+      setModalFondo(false); setFondo('');
+      await cargar();
     } catch (e) {
       mostrar(e.message, 'error');
     } finally {
@@ -133,7 +153,7 @@ export function Caja() {
               queda dentro, hasta que la cierres.
             </p>
             <button
-              onClick={() => { setNotas(''); setModalAbrir(true); }}
+              onClick={() => { setNotas(''); setFondo(''); setModalAbrir(true); }}
               style={{ padding: '15px 34px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700, fontSize: 16 }}
             >
               Abrir caja
@@ -148,7 +168,8 @@ export function Caja() {
           <CajaAbierta
             sesion={abierta}
             resumen={resumen}
-            onCerrar={() => { setNotas(''); setModalCerrar(true); }}
+            onCerrar={() => { setNotas(''); setContado(''); setModalCerrar(true); }}
+            onEditarFondo={() => { setFondo(String(resumen?.fondoInicial ?? 0)); setModalFondo(true); }}
           />
         )
       ) : (
@@ -161,11 +182,20 @@ export function Caja() {
           Se abre ahora, {formatearFechaHora(new Date().toISOString())}.
         </p>
         <div className="campo">
-          <label>Nota (opcional)</label>
+          <label>Plata que dejás para el vuelto</label>
           <input
-            autoFocus value={notas} onChange={(e) => setNotas(e.target.value)}
-            placeholder="Ej: turno mañana"
+            type="number" inputMode="decimal" step="any" min="0" autoFocus
+            value={fondo} onChange={(e) => setFondo(e.target.value)}
+            placeholder="Ej: 20000"
           />
+          <small className="ayuda">
+            El efectivo que queda en el cajón antes de empezar. Se suma a lo que tiene que
+            haber al cerrar, así el arqueo cuadra.
+          </small>
+        </div>
+        <div className="campo">
+          <label>Nota (opcional)</label>
+          <input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Ej: turno mañana" />
         </div>
         <div style={{ display: 'flex', gap: 9 }}>
           <button
@@ -200,12 +230,41 @@ export function Caja() {
                 {formatearMonto(resumen.efectivoEnCaja)}
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.45 }}>
-                {formatearMonto(resumen.totalEfectivo)} de ventas en efectivo
+                {resumen.fondoInicial > 0 && <>{formatearMonto(resumen.fondoInicial)} de fondo + </>}
+                {formatearMonto(resumen.totalEfectivo)} de ventas
                 {resumen.fiadoCobradoEfectivo > 0 && (
-                  <> + {formatearMonto(resumen.fiadoCobradoEfectivo)} de fiados cobrados en efectivo</>
+                  <> + {formatearMonto(resumen.fiadoCobradoEfectivo)} de fiados cobrados</>
                 )}
               </div>
             </div>
+
+            {/* Arqueo: contar el cajón y ver si cuadra */}
+            <div className="campo">
+              <label>¿Cuánto contaste en el cajón?</label>
+              <input
+                type="number" inputMode="decimal" step="any" min="0" autoFocus
+                value={contado} onChange={(e) => setContado(e.target.value)}
+                placeholder="Contá la plata y poné el total"
+              />
+              <small className="ayuda">Opcional. Si lo dejás vacío se cierra igual, sin arqueo.</small>
+            </div>
+
+            {contado.trim() !== '' && !isNaN(parseFloat(contado)) && (() => {
+              const dif = parseFloat(contado) - resumen.efectivoEnCaja;
+              const cuadra = Math.abs(dif) < 0.01;
+              return (
+                <div
+                  className="panel-destacado"
+                  style={{
+                    marginBottom: 14,
+                    backgroundColor: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)',
+                  }}
+                >
+                  <div className="etiqueta">{cuadra ? 'Cuadra perfecto' : dif > 0 ? 'Sobra' : 'Falta'}</div>
+                  <div className="valor">{cuadra ? '✓' : formatearMonto(Math.abs(dif))}</div>
+                </div>
+              );
+            })()}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
               <Metrica etiqueta="TRANSFERENCIAS" valor={formatearMonto(resumen.totalTransferencia + resumen.fiadoCobradoTransferencia)} chico />
@@ -215,7 +274,7 @@ export function Caja() {
 
             <div className="campo">
               <label>Nota de cierre (opcional)</label>
-              <input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Ej: faltaron $500" />
+              <input value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Ej: le di cambio a Juan" />
             </div>
 
             <div style={{ display: 'flex', gap: 9 }}>
@@ -236,6 +295,36 @@ export function Caja() {
         )}
       </Modal>
 
+      {/* ══════════ Corregir fondo ══════════ */}
+      <Modal abierto={modalFondo} onCerrar={() => setModalFondo(false)} titulo="Fondo para vuelto" ancho={400}>
+        <div className="campo">
+          <label>Plata que dejaste en el cajón</label>
+          <input
+            type="number" inputMode="decimal" step="any" min="0" autoFocus
+            value={fondo} onChange={(e) => setFondo(e.target.value)}
+            placeholder="Ej: 20000"
+          />
+          <small className="ayuda">
+            Es el efectivo que ya estaba antes de empezar a vender. Sin esto, lo que
+            tiene que haber en el cajón siempre da de menos.
+          </small>
+        </div>
+        <div style={{ display: 'flex', gap: 9 }}>
+          <button
+            onClick={() => setModalFondo(false)}
+            style={{ flex: 1, padding: 13, borderRadius: 'var(--radius)', backgroundColor: 'var(--surface-2)', border: '1.5px solid var(--border)', color: 'var(--text-secondary)' }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={guardarFondo} disabled={procesando}
+            style={{ flex: 2, padding: 13, borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontWeight: 700 }}
+          >
+            {procesando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </Modal>
+
       {/* ══════════ Detalle del historial ══════════ */}
       <Modal
         abierto={!!detalle}
@@ -250,7 +339,7 @@ export function Caja() {
 }
 
 // ══════════════════════════════════════════════════════════
-function CajaAbierta({ sesion, resumen, onCerrar }) {
+function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
   if (!resumen) return <div className="vacio">Cargando el resumen…</div>;
 
   const movimientos = [
@@ -295,9 +384,13 @@ function CajaAbierta({ sesion, resumen, onCerrar }) {
           {formatearMonto(resumen.efectivoEnCaja)}
         </div>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
+          {resumen.fondoInicial > 0 && <>{formatearMonto(resumen.fondoInicial)} de fondo + </>}
           {formatearMonto(resumen.totalEfectivo)} de ventas
           {resumen.fiadoCobradoEfectivo > 0 && <> + {formatearMonto(resumen.fiadoCobradoEfectivo)} de fiados cobrados</>}
         </div>
+        <button onClick={onEditarFondo} className="theme-toggle" style={{ marginTop: 10 }}>
+          {resumen.fondoInicial > 0 ? 'Corregir el fondo' : 'Cargar el fondo para vuelto'}
+        </button>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -392,6 +485,15 @@ function Historial({ historial, cargando, onVer }) {
                 {formatearMonto(s.total_fiado_nuevo)} fiado
               </div>
             )}
+            {s.efectivo_contado != null && (() => {
+              const dif = Number(s.efectivo_contado) - Number(s.efectivo_esperado || 0);
+              const cuadra = Math.abs(dif) < 0.01;
+              return (
+                <div style={{ fontSize: 12, marginTop: 2, color: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)' }}>
+                  {cuadra ? 'cuadró' : dif > 0 ? `sobró ${formatearMonto(dif)}` : `faltó ${formatearMonto(-dif)}`}
+                </div>
+              );
+            })()}
           </div>
         </button>
       ))}
@@ -426,7 +528,38 @@ function DetalleSesion({ sesion, datos }) {
         </div>
       )}
 
+      {/* Arqueo: sólo si se contó el cajón al cerrar */}
+      {sesion.efectivo_contado != null && (() => {
+        const esperado = Number(sesion.efectivo_esperado || 0);
+        const contado = Number(sesion.efectivo_contado);
+        const dif = contado - esperado;
+        const cuadra = Math.abs(dif) < 0.01;
+        return (
+          <div
+            className="sub-card"
+            style={{ marginBottom: 14, borderColor: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)' }}
+          >
+            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 4 }}>ARQUEO</div>
+            <div style={{ fontSize: 14 }}>
+              Tenía que haber <strong>{formatearMonto(esperado)}</strong> · contó{' '}
+              <strong>{formatearMonto(contado)}</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 17, fontWeight: 700, marginTop: 4,
+                color: cuadra ? 'var(--success)' : dif > 0 ? 'var(--blue)' : 'var(--danger)',
+              }}
+            >
+              {cuadra ? 'Cuadró' : dif > 0 ? `Sobraron ${formatearMonto(dif)}` : `Faltaron ${formatearMonto(-dif)}`}
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        {Number(sesion.fondo_inicial) > 0 && (
+          <Metrica etiqueta="FONDO" valor={formatearMonto(sesion.fondo_inicial)} chico />
+        )}
         <Metrica etiqueta="EFECTIVO" valor={formatearMonto(sesion.total_efectivo)} chico />
         <Metrica etiqueta="TRANSFERENCIA" valor={formatearMonto(sesion.total_transferencia)} chico />
         <Metrica etiqueta="COBRADO" valor={formatearMonto(sesion.total_cobrado)} color="var(--success)" chico />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { combustiblesAPI, clientesAPI, ventasAPI } from '../lib/api.js';
+import { combustiblesAPI, clientesAPI, ventasAPI, cajaAPI } from '../lib/api.js';
 import { formatearMonto, formatearHora, esHoy } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
 import { useEsEscritorio } from '../hooks/useAncho.js';
@@ -25,6 +25,7 @@ export function Ventas() {
   const [combustibles, setCombustibles] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [ventasHoy, setVentasHoy] = useState([]);
+  const [caja, setCaja] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   const [form, setForm] = useState(FORM_VACIO);
@@ -40,14 +41,16 @@ export function Ventas() {
   // ── Carga ─────────────────────────────────────────────────
   const cargar = async () => {
     try {
-      const [cbs, c, v] = await Promise.all([
+      const [cbs, c, v, cj] = await Promise.all([
         combustiblesAPI.obtenerTodos(),
         clientesAPI.obtenerTodos(),
         ventasAPI.obtenerTodas(),
+        cajaAPI.obtenerCajaAbierta(),
       ]);
       setCombustibles(cbs);
       setClientes(c);
       setVentasHoy(v.filter((x) => esHoy(x.fecha)));
+      setCaja(cj);
       // Si todavía no hay uno elegido, arrancar por el primero
       setForm((f) => (f.combustibleId ? f : { ...f, combustibleId: cbs[0]?.id ?? null }));
     } catch (e) {
@@ -93,6 +96,13 @@ export function Ventas() {
     if (!puedeRegistrar) return;
     setRegistrando(true);
     try {
+      // Sin caja abierta la venta quedaria fuera de todo cierre. En vez
+      // de frenarlo con un cliente esperando, se abre acá mismo: el
+      // control se consigue igual y nunca hay una venta sin registrar.
+      if (!caja) {
+        await cajaAPI.abrirCaja('Abierta al registrar una venta');
+      }
+
       await ventasAPI.registrar({
         clienteId: esFiado ? form.clienteId : null,
         combustibleId: form.combustibleId,
@@ -362,6 +372,17 @@ export function Ventas() {
             </div>
           )}
 
+          {/* Sin caja abierta la venta no entraría en ningún cierre.
+              Se avisa, pero el mismo botón abre la caja y registra. */}
+          {!cargando && !caja && (
+            <div className="sub-card" style={{ marginBottom: 12, borderColor: 'var(--accent)' }}>
+              <strong style={{ color: 'var(--accent)' }}>No hay caja abierta</strong>
+              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.45 }}>
+                Se va a abrir ahora junto con esta venta, así queda dentro del turno.
+              </div>
+            </div>
+          )}
+
           <button
             onClick={registrar}
             disabled={!puedeRegistrar}
@@ -372,7 +393,11 @@ export function Ventas() {
               color: 'white',
             }}
           >
-            {registrando ? 'Registrando…' : esFiado ? 'Registrar fiado' : 'Registrar venta'}
+            {registrando
+              ? 'Registrando…'
+              : !caja
+                ? (esFiado ? 'Abrir caja y registrar fiado' : 'Abrir caja y registrar venta')
+                : (esFiado ? 'Registrar fiado' : 'Registrar venta')}
           </button>
         </div>
 

@@ -40,11 +40,18 @@ try {
   console.log('  · autenticado\n');
 
   // ── Estado inicial ────────────────────────────────────────
+  // El test trabaja con SU PROPIO combustible, no con los de verdad.
+  // Asi no depende de como se llamen (son editables) y cambiar precios
+  // no revalua los fiados reales.
+  const comb = await combustiblesAPI.crear({
+    nombre: 'ZZ Test Combustible', precioPorLitro: 100, cantidadLitros: 1000, orden: 999,
+  });
+  limpiar.push(() => supabase.from('combustibles').delete().eq('id', comb.id));
+
   const combustibles0 = await combustiblesAPI.obtenerTodos();
-  const nafta0 = combustibles0.find((c) => c.nombre === 'Nafta');
   const clientes0 = await clientesAPI.obtenerTodos();
   const deuda0 = clientes0.reduce((s, c) => s + c.debe, 0);
-  console.log(`  estado inicial: nafta ${nafta0.cantidad_litros} L @ $${nafta0.precio_por_litro} · deuda $${deuda0.toLocaleString('es-AR')}\n`);
+  console.log(`  ${combustibles0.length} combustibles · deuda real $${deuda0.toLocaleString('es-AR')} · se prueba sobre "${comb.nombre}"\n`);
 
   // ── Cliente de prueba ─────────────────────────────────────
   console.log('clientes');
@@ -59,7 +66,7 @@ try {
   // ── Venta al contado ──────────────────────────────────────
   console.log('\nventa al contado');
   const contado = await ventasAPI.registrar({
-    combustibleId: nafta0.id, cantidadLitros: 10, precioPorLitro: 100,
+    combustibleId: comb.id, cantidadLitros: 10, precioPorLitro: 100,
     esFiado: false, metodoPago: 'Efectivo',
   });
   limpiar.push(() => supabase.from('ventas').delete().eq('id', contado.id));
@@ -70,25 +77,25 @@ try {
   check('saldo cero', cerca(vContado.saldo, 0));
 
   const stock1 = await combustiblesAPI.obtenerTodos();
-  check('descuenta del stock', cerca(stock1.find((c) => c.nombre === 'Nafta').cantidad_litros, nafta0.cantidad_litros - 10));
+  check('descuenta del stock', cerca(stock1.find((c) => c.id === comb.id).cantidad_litros, comb.cantidad_litros - 10));
 
   let sinMetodo = null;
   try {
-    await ventasAPI.registrar({ combustibleId: nafta0.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: false });
+    await ventasAPI.registrar({ combustibleId: comb.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: false });
   } catch (e) { sinMetodo = e.message; }
   check('rechaza venta al contado sin método de pago', !!sinMetodo);
 
   // ── Fiado y cobros ────────────────────────────────────────
   console.log('\nfiado');
   const fiado = await ventasAPI.registrar({
-    clienteId: cli.id, combustibleId: nafta0.id, cantidadLitros: 20, precioPorLitro: 100, esFiado: true,
+    clienteId: cli.id, combustibleId: comb.id, cantidadLitros: 20, precioPorLitro: 100, esFiado: true,
   });
   limpiar.push(() => supabase.from('ventas').delete().eq('id', fiado.id));
   check('el fiado vale litros × precio', cerca(fiado.total, 2000));
 
   let sinCliente = null;
   try {
-    await ventasAPI.registrar({ combustibleId: nafta0.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: true });
+    await ventasAPI.registrar({ combustibleId: comb.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: true });
   } catch (e) { sinCliente = e.message; }
   check('rechaza fiado sin cliente', !!sinCliente);
 
@@ -107,7 +114,7 @@ try {
 
   // ── Revaluación por cambio de precio ──────────────────────
   console.log('\ncambio de precio');
-  await combustiblesAPI.actualizarPrecio(nafta0.id, 200);
+  await combustiblesAPI.actualizarPrecio(comb.id, 200);
   const revaluado = await ventasAPI.obtenerUna(fiado.id);
   check('el fiado se revalúa al precio nuevo', cerca(revaluado.total, 4000), `total=${revaluado.total}`);
   check('el saldo descuenta lo ya cobrado', cerca(revaluado.saldo, 3500), `saldo=${revaluado.saldo}`);
@@ -116,7 +123,7 @@ try {
   check('la venta ya cobrada NO se revalúa', cerca(contadoTrasPrecio.total, 1000), `total=${contadoTrasPrecio.total}`);
 
   // La simulación tiene que anticipar exactamente lo que después pasa
-  const sim = await combustiblesAPI.simularCambioPrecio(nafta0.id, 300);
+  const sim = await combustiblesAPI.simularCambioPrecio(comb.id, 300);
   const simCli = sim.afectados.find((a) => a.clienteId === cli.id);
   check('la simulación anticipa la deuda del cliente',
     simCli && cerca(simCli.antes, 3500) && cerca(simCli.despues, 5500),
@@ -129,12 +136,12 @@ try {
   // total. Antes eso daba el fiado por saldado, y al corregir el
   // precio la deuda no volvía nunca más: se perdía en silencio.
   console.log('\nprecio mal tipeado (el caso que perdía plata)');
-  await combustiblesAPI.actualizarPrecio(nafta0.id, 10);
+  await combustiblesAPI.actualizarPrecio(comb.id, 10);
   const conTypo = await ventasAPI.obtenerUna(fiado.id);
   check('con el precio mal cargado el saldo da cero', cerca(conTypo.saldo, 0), `saldo=${conTypo.saldo}`);
   check('pero el fiado NO queda saldado', conTypo.pagado === false);
 
-  await combustiblesAPI.actualizarPrecio(nafta0.id, 100);
+  await combustiblesAPI.actualizarPrecio(comb.id, 100);
   const corregido = await ventasAPI.obtenerUna(fiado.id);
   check('al corregir el precio la deuda vuelve sola', cerca(corregido.saldo, 1500), `saldo=${corregido.saldo}`);
 
@@ -151,28 +158,28 @@ try {
 
   // Lo inverso del caso anterior: una vez saldado, el fiado queda
   // cerrado y no revive aunque el precio suba.
-  await combustiblesAPI.actualizarPrecio(nafta0.id, 500);
+  await combustiblesAPI.actualizarPrecio(comb.id, 500);
   const saldadoTrasSubida = await ventasAPI.obtenerUna(fiado.id);
   check('un fiado saldado no revive al subir el precio', saldadoTrasSubida.pagado === true && cerca(saldadoTrasSubida.saldo, 0));
-  await combustiblesAPI.actualizarPrecio(nafta0.id, nafta0.precio_por_litro);
+  await combustiblesAPI.actualizarPrecio(comb.id, comb.precio_por_litro);
 
   // ── Editar y borrar ───────────────────────────────────────
   console.log('\neditar y borrar');
   await ventasAPI.editar(contado.id, {
-    combustibleId: nafta0.id, cantidadLitros: 5, precioPorLitro: 100,
+    combustibleId: comb.id, cantidadLitros: 5, precioPorLitro: 100,
     esFiado: false, metodoPago: 'Efectivo',
   });
   const stockTrasEditar = await combustiblesAPI.obtenerTodos();
   check('editar devuelve litros al tanque',
-    cerca(stockTrasEditar.find((c) => c.nombre === 'Nafta').cantidad_litros, nafta0.cantidad_litros - 5 - 20),
-    `nafta=${stockTrasEditar.find((c) => c.nombre === 'Nafta').cantidad_litros}`);
+    cerca(stockTrasEditar.find((c) => c.id === comb.id).cantidad_litros, comb.cantidad_litros - 5 - 20),
+    `nafta=${stockTrasEditar.find((c) => c.id === comb.id).cantidad_litros}`);
 
   await ventasAPI.eliminar(contado.id);
   await ventasAPI.eliminar(fiado.id);
   const stockFinal = await combustiblesAPI.obtenerTodos();
   check('borrar devuelve todo el stock',
-    cerca(stockFinal.find((c) => c.nombre === 'Nafta').cantidad_litros, nafta0.cantidad_litros),
-    `nafta=${stockFinal.find((c) => c.nombre === 'Nafta').cantidad_litros} esperado=${nafta0.cantidad_litros}`);
+    cerca(stockFinal.find((c) => c.id === comb.id).cantidad_litros, comb.cantidad_litros),
+    `nafta=${stockFinal.find((c) => c.id === comb.id).cantidad_litros} esperado=${comb.cantidad_litros}`);
 
   const pagosHuerfanos = await ventasAPI.obtenerPagosFiado(fiado.id);
   check('los pagos se borran en cascada', pagosHuerfanos.length === 0);
@@ -188,9 +195,11 @@ try {
   if (yaAbierta) {
     check('había una caja abierta: se saltea el test para no tocarla', true);
   } else {
-    const caja = await cajaAPI.abrirCaja('smoke test');
+    // Se abre con $5.000 de fondo para vuelto
+    const caja = await cajaAPI.abrirCaja('smoke test', 5000);
     limpiar.push(() => supabase.from('sesiones_caja').delete().eq('id', caja.id));
     check('abre caja', !!caja.id);
+    check('guarda el fondo para vuelto', cerca(Number(caja.fondo_inicial), 5000), `fondo=${caja.fondo_inicial}`);
 
     let dobleCaja = null;
     try { await cajaAPI.abrirCaja('otra'); } catch (e) { dobleCaja = e.message; }
@@ -199,15 +208,15 @@ try {
     // Un turno: efectivo, transferencia, un fiado, y un cobro parcial
     // de ese fiado en efectivo.
     const vEfectivo = await ventasAPI.registrar({
-      combustibleId: nafta0.id, cantidadLitros: 3, precioPorLitro: 1000,
+      combustibleId: comb.id, cantidadLitros: 3, precioPorLitro: 1000,
       esFiado: false, metodoPago: 'Efectivo',
     });
     const vTransf = await ventasAPI.registrar({
-      combustibleId: nafta0.id, cantidadLitros: 2, precioPorLitro: 1000,
+      combustibleId: comb.id, cantidadLitros: 2, precioPorLitro: 1000,
       esFiado: false, metodoPago: 'Transferencia',
     });
     const vFiado = await ventasAPI.registrar({
-      clienteId: cli.id, combustibleId: nafta0.id, cantidadLitros: 10, precioPorLitro: 1000, esFiado: true,
+      clienteId: cli.id, combustibleId: comb.id, cantidadLitros: 10, precioPorLitro: 1000, esFiado: true,
     });
     for (const v of [vEfectivo, vTransf, vFiado]) {
       limpiar.push(() => supabase.from('ventas').delete().eq('id', v.id));
@@ -222,17 +231,35 @@ try {
     check('cuenta lo fiado aparte de lo cobrado', cerca(r.totalFiadoNuevo, 10000), `fiadoNuevo=${r.totalFiadoNuevo}`);
     check('registra el cobro de fiado del turno', cerca(r.totalFiadoCobrado, 4000), `fiadoCobrado=${r.totalFiadoCobrado}`);
 
-    // Lo que de verdad importa al cerrar: cuánta plata hay en el cajón
-    check('el efectivo en caja suma ventas + fiados cobrados en efectivo',
-      cerca(r.efectivoEnCaja, 7000), `efectivoEnCaja=${r.efectivoEnCaja} (esperado 3000+4000)`);
+    // Lo que de verdad importa al cerrar: cuánta plata hay en el cajón.
+    // Fondo 5000 + ventas en efectivo 3000 + fiado cobrado 4000 = 12000
+    check('el efectivo en caja suma fondo + ventas + fiados cobrados en efectivo',
+      cerca(r.efectivoEnCaja, 12000), `efectivoEnCaja=${r.efectivoEnCaja} (esperado 5000+3000+4000)`);
     check('un fiado no cobrado NO cuenta como plata en el cajón',
-      !cerca(r.efectivoEnCaja, 17000));
+      !cerca(r.efectivoEnCaja, 22000));
+
+    // Corregir el fondo recalcula el cajón sin tocar nada más
+    await cajaAPI.actualizarFondo(caja.id, 8000);
+    const rFondo = await cajaAPI.obtenerResumen(caja.id);
+    check('corregir el fondo recalcula el cajón',
+      cerca(rFondo.efectivoEnCaja, 15000), `efectivoEnCaja=${rFondo.efectivoEnCaja}`);
+    check('corregir el fondo no toca lo cobrado', cerca(rFondo.totalCobrado, 5000));
+    await cajaAPI.actualizarFondo(caja.id, 5000);
 
     check('desglosa los litros por combustible',
-      cerca(r.litrosPorCombustible['Nafta'] || 0, 15), `litros=${JSON.stringify(r.litrosPorCombustible)}`);
+      cerca(r.litrosPorCombustible[comb.nombre] || 0, 15), `litros=${JSON.stringify(r.litrosPorCombustible)}`);
 
-    const cerrado = await cajaAPI.cerrarCaja(caja.id, 'fin smoke');
+    // Cierra con arqueo: contó $11.500 donde tenía que haber $12.000
+    const cerrado = await cajaAPI.cerrarCaja(caja.id, 'fin smoke', 11500);
     check('al cerrar no queda ninguna abierta', (await cajaAPI.obtenerCajaAbierta()) === null);
+
+    const conArqueo = (await cajaAPI.obtenerHistorial()).find((s) => s.id === caja.id);
+    check('congela lo que tenía que haber en el cajón',
+      cerca(Number(conArqueo.efectivo_esperado), 12000), `esperado=${conArqueo.efectivo_esperado}`);
+    check('guarda lo que se contó de verdad',
+      cerca(Number(conArqueo.efectivo_contado), 11500), `contado=${conArqueo.efectivo_contado}`);
+    check('la diferencia del arqueo da el faltante',
+      cerca(Number(conArqueo.efectivo_contado) - Number(conArqueo.efectivo_esperado), -500));
 
     // Los totales quedan congelados en la fila, no se recalculan
     const guardada = (await cajaAPI.obtenerHistorial()).find((s) => s.id === caja.id);
@@ -240,7 +267,7 @@ try {
       cerca(Number(guardada.total_efectivo), 3000) && cerca(Number(guardada.total_cobrado), 5000),
       `efectivo=${guardada.total_efectivo} cobrado=${guardada.total_cobrado}`);
     check('guarda el desglose por combustible',
-      cerca(Number(guardada.litros_por_combustible?.Nafta || 0), 15),
+      cerca(Number(guardada.litros_por_combustible?.[comb.nombre] || 0), 15),
       `jsonb=${JSON.stringify(guardada.litros_por_combustible)}`);
 
     // Borrar una venta después del cierre no debe mover el registro
@@ -280,9 +307,9 @@ try {
   check('descuenta de su propio tanque', cerca(trasVenta.cantidad_litros, 46), `litros=${trasVenta.cantidad_litros}`);
 
   // Cada combustible tiene su precio: cambiar uno no toca a los otros
-  const naftaAntes = (await combustiblesAPI.obtenerTodos()).find((c) => c.nombre === 'Nafta');
+  const naftaAntes = (await combustiblesAPI.obtenerTodos()).find((c) => c.id === comb.id);
   await combustiblesAPI.actualizarPrecio(premium.id, 4000);
-  const naftaDespues = (await combustiblesAPI.obtenerTodos()).find((c) => c.nombre === 'Nafta');
+  const naftaDespues = (await combustiblesAPI.obtenerTodos()).find((c) => c.id === comb.id);
   check('el precio es por combustible, no compartido',
     cerca(naftaAntes.precio_por_litro, naftaDespues.precio_por_litro),
     `nafta antes=${naftaAntes.precio_por_litro} después=${naftaDespues.precio_por_litro}`);
