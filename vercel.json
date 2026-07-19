@@ -3,12 +3,8 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/((?!assets/|.*\\.[a-zA-Z0-9]+$).*)", "destination": "/index.html" }
-  ],
   "headers": [
     {
-      "comment": "El service worker no se cachea: si se cachea, la app queda pegada a una version vieja y deja de actualizarse sola.",
       "source": "/sw.js",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
