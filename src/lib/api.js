@@ -524,8 +524,9 @@ export const ventasAPI = {
     return alzar(await q).map((p) => ({ ...p, monto: num(p.monto) }));
   },
 
+  /** Del más viejo al más nuevo: así se lee como la historia del cobro. */
   obtenerPagosFiado: async (ventaId) =>
-    alzar(await supabase.from('pagos').select('*').eq('venta_id', ventaId).order('fecha', { ascending: false })),
+    alzar(await supabase.from('pagos').select('*').eq('venta_id', ventaId).order('fecha', { ascending: true })),
 
   /**
    * Editar sólo ajusta el stock. La deuda ya no hay que tocarla: al

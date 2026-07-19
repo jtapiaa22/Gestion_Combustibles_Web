@@ -37,6 +37,7 @@ export function Reportes() {
   const [clientes, setClientes] = useState([]);
   const [cargando, setCargando] = useState(true);
 
+  const [viendo, setViendo] = useState(null);
   const [editando, setEditando] = useState(null);
   const [borrando, setBorrando] = useState(null);
   const [procesando, setProcesando] = useState(false);
@@ -243,15 +244,8 @@ export function Reportes() {
                       </td>
                       <td style={{ color: 'var(--text-secondary)' }}>{v.cliente_nombre || '—'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <button onClick={() => setEditando(v)} className="theme-toggle" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setBorrando(v)}
-                          className="theme-toggle"
-                          style={{ padding: '4px 10px', fontSize: '0.75rem', marginLeft: 5, color: 'var(--danger)' }}
-                        >
-                          Borrar
+                        <button onClick={() => setViendo(v)} className="theme-toggle" style={{ padding: '4px 12px', fontSize: '0.75rem' }}>
+                          Ver detalle
                         </button>
                       </td>
                     </tr>
@@ -278,18 +272,27 @@ export function Reportes() {
                       {!v.es_fiado ? v.metodos_pago : v.pagado ? 'Saldado' : 'Fiado'}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
-                    <button onClick={() => setEditando(v)} className="theme-toggle" style={{ flex: 1 }}>Editar</button>
-                    <button onClick={() => setBorrando(v)} className="theme-toggle" style={{ flex: 1, color: 'var(--danger)' }}>
-                      Borrar
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => setViendo(v)}
+                    className="theme-toggle"
+                    style={{ width: '100%', marginTop: 9 }}
+                  >
+                    Ver detalle
+                  </button>
                 </div>
               ))}
             </div>
           )}
         </>
       )}
+
+      {/* ══════════ Detalle ══════════ */}
+      <DetalleVentaModal
+        venta={viendo}
+        onCerrar={() => setViendo(null)}
+        onEditar={(v) => { setViendo(null); setEditando(v); }}
+        onBorrar={(v) => { setViendo(null); setBorrando(v); }}
+      />
 
       {/* ══════════ Editar ══════════ */}
       <EditarVentaModal
@@ -350,6 +353,132 @@ export function Reportes() {
         )}
       </Modal>
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+/**
+ * Todo lo que pasó con una venta. Lo importante son los cobros uno
+ * por uno: en la tabla una venta partida dice "Efectivo +
+ * Transferencia", pero no cuánto de cada uno. Acá sí.
+ */
+function DetalleVentaModal({ venta, onCerrar, onEditar, onBorrar }) {
+  const [pagos, setPagos] = useState(null);
+
+  useEffect(() => {
+    if (!venta) { setPagos(null); return; }
+    ventasAPI.obtenerPagosFiado(venta.id).then(setPagos).catch(() => setPagos([]));
+  }, [venta]);
+
+  if (!venta) return null;
+
+  const Dato = ({ etiqueta, children, destacado }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+      <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{etiqueta}</span>
+      <span style={{ fontWeight: destacado ? 700 : 500, textAlign: 'right', fontSize: destacado ? '1rem' : '0.9375rem' }}>
+        {children}
+      </span>
+    </div>
+  );
+
+  return (
+    <Modal abierto onCerrar={onCerrar} titulo="Detalle de la venta" ancho={480}>
+      <div style={{ marginBottom: 18 }}>
+        <Dato etiqueta="Cuándo">{formatearFecha(venta.fecha)} a las {formatearHora(venta.fecha)}</Dato>
+        <Dato etiqueta="Combustible">{venta.combustible_nombre}</Dato>
+        <Dato etiqueta="Cantidad">{venta.cantidad_litros.toFixed(2)} L</Dato>
+        <Dato etiqueta="Precio por litro">{formatearMonto(venta.precio_por_litro)}</Dato>
+        <Dato etiqueta="Total" destacado>{formatearMonto(venta.total)}</Dato>
+        {venta.cliente_nombre && <Dato etiqueta="Cliente">{venta.cliente_nombre}</Dato>}
+      </div>
+
+      {/* Los cobros, uno por uno */}
+      <h3 className="titulo-seccion" style={{ marginBottom: 9 }}>
+        {venta.es_fiado ? 'Cobros recibidos' : 'Cómo se cobró'}
+      </h3>
+
+      {pagos === null ? (
+        <div className="vacio" style={{ padding: 14 }}>Cargando…</div>
+      ) : pagos.length === 0 ? (
+        <div className="vacio" style={{ padding: 14 }}>
+          Todavía no pagó nada de esta venta
+        </div>
+      ) : (
+        <div className="sub-card" style={{ padding: 0, marginBottom: 14 }}>
+          {pagos.map((p, i) => (
+            <div
+              key={p.id}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                gap: 10, padding: '11px 13px',
+                borderBottom: i < pagos.length - 1 ? '1px solid var(--border)' : 'none',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <strong style={{ color: 'var(--success)', fontSize: '1rem' }}>
+                  {formatearMonto(p.monto)}
+                </strong>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', marginTop: 1 }}>
+                  {p.metodo_pago}
+                  {p.titular_transferencia ? ` · de ${p.titular_transferencia}` : ''}
+                </div>
+              </div>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                {formatearFecha(p.fecha)}<br />{formatearHora(p.fecha)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Estado */}
+      {venta.es_fiado ? (
+        <div
+          className="sub-card"
+          style={{ marginBottom: 16, borderColor: venta.pagado ? 'var(--success)' : 'var(--accent)' }}
+        >
+          {venta.pagado ? (
+            <>
+              <strong style={{ color: 'var(--success)' }}>Saldado</strong>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: 3 }}>
+                {venta.saldado_en && <>Terminó de pagar el {formatearFecha(venta.saldado_en)}</>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700 }}>
+                TODAVÍA DEBE
+              </div>
+              <div style={{ fontSize: '1.625rem', fontWeight: 700, color: 'var(--accent)' }}>
+                {formatearMonto(venta.saldo)}
+              </div>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                de {formatearMonto(venta.total)}, pagó {formatearMonto(venta.cobrado)}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="sub-card" style={{ marginBottom: 16, color: 'var(--success)', fontWeight: 600 }}>
+          Cobrada por completo
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 9 }}>
+        <button
+          onClick={() => onBorrar(venta)}
+          style={{ flex: 1, padding: 13, borderRadius: 'var(--radius)', backgroundColor: 'transparent', border: '1.5px solid var(--danger)', color: 'var(--danger)', fontWeight: 600 }}
+        >
+          Borrar
+        </button>
+        <button
+          onClick={() => onEditar(venta)}
+          style={{ flex: 2, padding: 13, borderRadius: 'var(--radius)', backgroundColor: 'var(--accent)', color: '#1C1917', fontWeight: 700 }}
+        >
+          Editar
+        </button>
+      </div>
+    </Modal>
   );
 }
 
