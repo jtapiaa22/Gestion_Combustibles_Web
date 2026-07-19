@@ -19,7 +19,7 @@ const env = Object.fromEntries(
 Object.assign(process.env, env);
 
 const { supabase } = await import('../src/lib/supabase.js');
-const { stockAPI, clientesAPI, ventasAPI, cajaAPI } = await import('../src/lib/api.js');
+const { combustiblesAPI, clientesAPI, ventasAPI, cajaAPI } = await import('../src/lib/api.js');
 
 let ok = 0, fallos = 0;
 const cerca = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
@@ -40,8 +40,8 @@ try {
   console.log('  · autenticado\n');
 
   // ── Estado inicial ────────────────────────────────────────
-  const stock0 = await stockAPI.obtenerTodo();
-  const nafta0 = stock0.find((s) => s.tipo_combustible === 'Nafta');
+  const combustibles0 = await combustiblesAPI.obtenerTodos();
+  const nafta0 = combustibles0.find((c) => c.nombre === 'Nafta');
   const clientes0 = await clientesAPI.obtenerTodos();
   const deuda0 = clientes0.reduce((s, c) => s + c.debe, 0);
   console.log(`  estado inicial: nafta ${nafta0.cantidad_litros} L @ $${nafta0.precio_por_litro} · deuda $${deuda0.toLocaleString('es-AR')}\n`);
@@ -59,7 +59,7 @@ try {
   // ── Venta al contado ──────────────────────────────────────
   console.log('\nventa al contado');
   const contado = await ventasAPI.registrar({
-    tipoCombustible: 'Nafta', cantidadLitros: 10, precioPorLitro: 100,
+    combustibleId: nafta0.id, cantidadLitros: 10, precioPorLitro: 100,
     esFiado: false, metodoPago: 'Efectivo',
   });
   limpiar.push(() => supabase.from('ventas').delete().eq('id', contado.id));
@@ -69,26 +69,26 @@ try {
   check('queda marcada como pagada', vContado.pagado === true);
   check('saldo cero', cerca(vContado.saldo, 0));
 
-  const stock1 = await stockAPI.obtenerTodo();
-  check('descuenta del stock', cerca(stock1.find((s) => s.tipo_combustible === 'Nafta').cantidad_litros, nafta0.cantidad_litros - 10));
+  const stock1 = await combustiblesAPI.obtenerTodos();
+  check('descuenta del stock', cerca(stock1.find((c) => c.nombre === 'Nafta').cantidad_litros, nafta0.cantidad_litros - 10));
 
   let sinMetodo = null;
   try {
-    await ventasAPI.registrar({ tipoCombustible: 'Nafta', cantidadLitros: 1, precioPorLitro: 100, esFiado: false });
+    await ventasAPI.registrar({ combustibleId: nafta0.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: false });
   } catch (e) { sinMetodo = e.message; }
   check('rechaza venta al contado sin método de pago', !!sinMetodo);
 
   // ── Fiado y cobros ────────────────────────────────────────
   console.log('\nfiado');
   const fiado = await ventasAPI.registrar({
-    clienteId: cli.id, tipoCombustible: 'Nafta', cantidadLitros: 20, precioPorLitro: 100, esFiado: true,
+    clienteId: cli.id, combustibleId: nafta0.id, cantidadLitros: 20, precioPorLitro: 100, esFiado: true,
   });
   limpiar.push(() => supabase.from('ventas').delete().eq('id', fiado.id));
   check('el fiado vale litros × precio', cerca(fiado.total, 2000));
 
   let sinCliente = null;
   try {
-    await ventasAPI.registrar({ tipoCombustible: 'Nafta', cantidadLitros: 1, precioPorLitro: 100, esFiado: true });
+    await ventasAPI.registrar({ combustibleId: nafta0.id, cantidadLitros: 1, precioPorLitro: 100, esFiado: true });
   } catch (e) { sinCliente = e.message; }
   check('rechaza fiado sin cliente', !!sinCliente);
 
@@ -107,7 +107,7 @@ try {
 
   // ── Revaluación por cambio de precio ──────────────────────
   console.log('\ncambio de precio');
-  await stockAPI.actualizarPrecio('Nafta', 200);
+  await combustiblesAPI.actualizarPrecio(nafta0.id, 200);
   const revaluado = await ventasAPI.obtenerUna(fiado.id);
   check('el fiado se revalúa al precio nuevo', cerca(revaluado.total, 4000), `total=${revaluado.total}`);
   check('el saldo descuenta lo ya cobrado', cerca(revaluado.saldo, 3500), `saldo=${revaluado.saldo}`);
@@ -120,12 +120,12 @@ try {
   // total. Antes eso daba el fiado por saldado, y al corregir el
   // precio la deuda no volvía nunca más: se perdía en silencio.
   console.log('\nprecio mal tipeado (el caso que perdía plata)');
-  await stockAPI.actualizarPrecio('Nafta', 10);
+  await combustiblesAPI.actualizarPrecio(nafta0.id, 10);
   const conTypo = await ventasAPI.obtenerUna(fiado.id);
   check('con el precio mal cargado el saldo da cero', cerca(conTypo.saldo, 0), `saldo=${conTypo.saldo}`);
   check('pero el fiado NO queda saldado', conTypo.pagado === false);
 
-  await stockAPI.actualizarPrecio('Nafta', 100);
+  await combustiblesAPI.actualizarPrecio(nafta0.id, 100);
   const corregido = await ventasAPI.obtenerUna(fiado.id);
   check('al corregir el precio la deuda vuelve sola', cerca(corregido.saldo, 1500), `saldo=${corregido.saldo}`);
 
@@ -142,28 +142,28 @@ try {
 
   // Lo inverso del caso anterior: una vez saldado, el fiado queda
   // cerrado y no revive aunque el precio suba.
-  await stockAPI.actualizarPrecio('Nafta', 500);
+  await combustiblesAPI.actualizarPrecio(nafta0.id, 500);
   const saldadoTrasSubida = await ventasAPI.obtenerUna(fiado.id);
   check('un fiado saldado no revive al subir el precio', saldadoTrasSubida.pagado === true && cerca(saldadoTrasSubida.saldo, 0));
-  await stockAPI.actualizarPrecio('Nafta', nafta0.precio_por_litro);
+  await combustiblesAPI.actualizarPrecio(nafta0.id, nafta0.precio_por_litro);
 
   // ── Editar y borrar ───────────────────────────────────────
   console.log('\neditar y borrar');
   await ventasAPI.editar(contado.id, {
-    tipoCombustible: 'Nafta', cantidadLitros: 5, precioPorLitro: 100,
+    combustibleId: nafta0.id, cantidadLitros: 5, precioPorLitro: 100,
     esFiado: false, metodoPago: 'Efectivo',
   });
-  const stockTrasEditar = await stockAPI.obtenerTodo();
+  const stockTrasEditar = await combustiblesAPI.obtenerTodos();
   check('editar devuelve litros al tanque',
-    cerca(stockTrasEditar.find((s) => s.tipo_combustible === 'Nafta').cantidad_litros, nafta0.cantidad_litros - 5 - 20),
-    `nafta=${stockTrasEditar.find((s) => s.tipo_combustible === 'Nafta').cantidad_litros}`);
+    cerca(stockTrasEditar.find((c) => c.nombre === 'Nafta').cantidad_litros, nafta0.cantidad_litros - 5 - 20),
+    `nafta=${stockTrasEditar.find((c) => c.nombre === 'Nafta').cantidad_litros}`);
 
   await ventasAPI.eliminar(contado.id);
   await ventasAPI.eliminar(fiado.id);
-  const stockFinal = await stockAPI.obtenerTodo();
+  const stockFinal = await combustiblesAPI.obtenerTodos();
   check('borrar devuelve todo el stock',
-    cerca(stockFinal.find((s) => s.tipo_combustible === 'Nafta').cantidad_litros, nafta0.cantidad_litros),
-    `nafta=${stockFinal.find((s) => s.tipo_combustible === 'Nafta').cantidad_litros} esperado=${nafta0.cantidad_litros}`);
+    cerca(stockFinal.find((c) => c.nombre === 'Nafta').cantidad_litros, nafta0.cantidad_litros),
+    `nafta=${stockFinal.find((c) => c.nombre === 'Nafta').cantidad_litros} esperado=${nafta0.cantidad_litros}`);
 
   const pagosHuerfanos = await ventasAPI.obtenerPagosFiado(fiado.id);
   check('los pagos se borran en cascada', pagosHuerfanos.length === 0);
@@ -189,6 +189,52 @@ try {
     const trasCierre = await cajaAPI.obtenerCajaAbierta();
     check('al cerrar no queda ninguna abierta', trasCierre === null);
   }
+
+  // ── Catálogo de combustibles ──────────────────────────────
+  // El motivo del rediseño: poder vender Premium sin tocar el código.
+  console.log('\ncatálogo de combustibles');
+  const premium = await combustiblesAPI.crear({
+    nombre: 'ZZ Premium Prueba', precioPorLitro: 3500, cantidadLitros: 50, orden: 99,
+  });
+  limpiar.push(() => supabase.from('combustibles').delete().eq('id', premium.id));
+  check('se puede agregar un combustible nuevo', !!premium.id);
+
+  let dupComb = null;
+  try { await combustiblesAPI.crear({ nombre: '  zz premium prueba' }); } catch (e) { dupComb = e.message; }
+  check('rechaza un combustible con nombre repetido', !!dupComb, dupComb || 'no lanzó error');
+
+  const ventaPremium = await ventasAPI.registrar({
+    combustibleId: premium.id, cantidadLitros: 4, precioPorLitro: 3500,
+    esFiado: false, metodoPago: 'Efectivo',
+  });
+  limpiar.push(() => supabase.from('ventas').delete().eq('id', ventaPremium.id));
+  check('se le puede vender', cerca(ventaPremium.total, 14000), `total=${ventaPremium.total}`);
+
+  const vPremium = await ventasAPI.obtenerUna(ventaPremium.id);
+  check('la venta trae el nombre del combustible', vPremium.combustible_nombre === 'ZZ Premium Prueba', `nombre=${vPremium.combustible_nombre}`);
+
+  const trasVenta = (await combustiblesAPI.obtenerTodos()).find((c) => c.id === premium.id);
+  check('descuenta de su propio tanque', cerca(trasVenta.cantidad_litros, 46), `litros=${trasVenta.cantidad_litros}`);
+
+  // Cada combustible tiene su precio: cambiar uno no toca a los otros
+  const naftaAntes = (await combustiblesAPI.obtenerTodos()).find((c) => c.nombre === 'Nafta');
+  await combustiblesAPI.actualizarPrecio(premium.id, 4000);
+  const naftaDespues = (await combustiblesAPI.obtenerTodos()).find((c) => c.nombre === 'Nafta');
+  check('el precio es por combustible, no compartido',
+    cerca(naftaAntes.precio_por_litro, naftaDespues.precio_por_litro),
+    `nafta antes=${naftaAntes.precio_por_litro} después=${naftaDespues.precio_por_litro}`);
+
+  let conStock = null;
+  try { await combustiblesAPI.desactivar(premium.id); } catch (e) { conStock = e.message; }
+  check('no deja desactivar uno que todavía tiene litros', !!conStock, conStock || 'no lanzó error');
+
+  await ventasAPI.eliminar(ventaPremium.id);
+  await combustiblesAPI.actualizarCantidad(premium.id, -50);
+  await combustiblesAPI.desactivar(premium.id);
+  const activos = await combustiblesAPI.obtenerTodos();
+  const todos = await combustiblesAPI.obtenerTodos({ incluirInactivos: true });
+  check('desactivado sale de la lista de venta', !activos.some((c) => c.id === premium.id));
+  check('pero sigue existiendo para el historial', todos.some((c) => c.id === premium.id));
 
   // ── Estado final ──────────────────────────────────────────
   console.log('\nestado final');

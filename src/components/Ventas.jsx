@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { stockAPI, clientesAPI, ventasAPI } from '../lib/api.js';
+import { combustiblesAPI, clientesAPI, ventasAPI } from '../lib/api.js';
 import { formatearMonto, formatearHora, esHoy } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
 import { useEsEscritorio } from '../hooks/useAncho.js';
 
 const FORM_VACIO = {
-  tipoCombustible: 'Nafta',
+  combustibleId: null, // se completa con el primero del catálogo
   cantidadLitros: '',
   montoPedido: '',
   cobro: 'Efectivo', // Efectivo | Transferencia | Fiado
@@ -22,7 +22,7 @@ export function Ventas() {
   const { mostrar, Notificacion } = useNotificacion();
   const esEscritorio = useEsEscritorio();
 
-  const [stock, setStock] = useState([]);
+  const [combustibles, setCombustibles] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [ventasHoy, setVentasHoy] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -40,14 +40,16 @@ export function Ventas() {
   // ── Carga ─────────────────────────────────────────────────
   const cargar = async () => {
     try {
-      const [s, c, v] = await Promise.all([
-        stockAPI.obtenerTodo(),
+      const [cbs, c, v] = await Promise.all([
+        combustiblesAPI.obtenerTodos(),
         clientesAPI.obtenerTodos(),
         ventasAPI.obtenerTodas(),
       ]);
-      setStock(s);
+      setCombustibles(cbs);
       setClientes(c);
       setVentasHoy(v.filter((x) => esHoy(x.fecha)));
+      // Si todavía no hay uno elegido, arrancar por el primero
+      setForm((f) => (f.combustibleId ? f : { ...f, combustibleId: cbs[0]?.id ?? null }));
     } catch (e) {
       mostrar(`No se pudieron cargar los datos: ${e.message}`, 'error');
     } finally {
@@ -58,7 +60,7 @@ export function Ventas() {
   useEffect(() => { cargar(); }, []);
 
   // ── Derivados ─────────────────────────────────────────────
-  const combustible = stock.find((s) => s.tipo_combustible === form.tipoCombustible);
+  const combustible = combustibles.find((c) => c.id === form.combustibleId);
   const precio = combustible?.precio_por_litro || 0;
   const disponible = combustible?.cantidad_litros || 0;
 
@@ -72,12 +74,13 @@ export function Ventas() {
   const esFiado = form.cobro === 'Fiado';
 
   const problema = useMemo(() => {
-    if (precio <= 0) return `No hay precio cargado para ${form.tipoCombustible}`;
+    if (!combustible) return cargando ? null : 'No hay ningún combustible cargado. Agregalo en Stock.';
+    if (precio <= 0) return `No hay precio cargado para ${combustible.nombre}`;
     if (litros <= 0) return null; // todavía no cargó nada, no es un error
-    if (litros > disponible) return `Solo quedan ${disponible.toFixed(2)} litros de ${form.tipoCombustible}`;
+    if (litros > disponible) return `Solo quedan ${disponible.toFixed(2)} litros de ${combustible.nombre}`;
     if (esFiado && !form.clienteId) return 'Elegí a quién se le fía';
     return null;
-  }, [precio, litros, disponible, esFiado, form.clienteId, form.tipoCombustible]);
+  }, [combustible, cargando, precio, litros, disponible, esFiado, form.clienteId]);
 
   const puedeRegistrar = litros > 0 && !problema && !registrando;
 
@@ -92,7 +95,7 @@ export function Ventas() {
     try {
       await ventasAPI.registrar({
         clienteId: esFiado ? form.clienteId : null,
-        tipoCombustible: form.tipoCombustible,
+        combustibleId: form.combustibleId,
         cantidadLitros: redondearLitros(litros),
         precioPorLitro: precio,
         esFiado,
@@ -100,7 +103,7 @@ export function Ventas() {
         titularTransferencia: form.cobro === 'Transferencia' ? form.titularTransferencia : null,
       });
       mostrar(`Venta registrada · ${formatearMonto(total)}`);
-      setForm({ ...FORM_VACIO, tipoCombustible: form.tipoCombustible });
+      setForm({ ...FORM_VACIO, combustibleId: form.combustibleId });
       setMontoPagado('');
       setFormCliente(null);
       await cargar();
@@ -140,22 +143,34 @@ export function Ventas() {
           {/* Combustible */}
           <div className="campo">
             <label>Combustible</label>
-            <div className="segmentado">
-              {['Nafta', 'Gasoil'].map((t) => (
-                <button
-                  key={t}
-                  className={form.tipoCombustible === t ? 'activo' : ''}
-                  onClick={() => set({ tipoCombustible: t })}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <small className="ayuda">
-              {cargando ? 'Cargando…' : (
-                <>Quedan <strong>{disponible.toFixed(2)} L</strong> · {formatearMonto(precio)} por litro</>
-              )}
-            </small>
+            {cargando ? (
+              <div className="vacio" style={{ padding: 16 }}>Cargando…</div>
+            ) : combustibles.length === 0 ? (
+              <div className="vacio" style={{ padding: 16 }}>
+                No hay combustibles cargados.<br />Agregalos desde la pantalla de Stock.
+              </div>
+            ) : (
+              <div className="grilla-combustibles">
+                {combustibles.map((c) => {
+                  const vacio = c.cantidad_litros <= 0;
+                  return (
+                    <button
+                      key={c.id}
+                      className={`chip-combustible ${form.combustibleId === c.id ? 'activo' : ''}`}
+                      onClick={() => set({ combustibleId: c.id })}
+                      disabled={vacio}
+                      title={vacio ? 'Sin stock' : undefined}
+                    >
+                      <span className="nombre">{c.nombre}</span>
+                      <span className="precio">{formatearMonto(c.precio_por_litro)}/L</span>
+                      <span className="stock">
+                        {vacio ? 'sin stock' : `${c.cantidad_litros.toFixed(1)} L`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Modo de carga */}
@@ -390,7 +405,7 @@ export function Ventas() {
                   {ventasHoy.map((v) => (
                     <tr key={v.id}>
                       <td>{formatearHora(v.fecha)}</td>
-                      <td>{v.tipo_combustible}</td>
+                      <td>{v.combustible_nombre}</td>
                       <td>{v.cantidad_litros.toFixed(2)} L</td>
                       <td><strong>{formatearMonto(v.total)}</strong></td>
                       <td>
@@ -419,7 +434,7 @@ export function Ventas() {
                     )}
                   </div>
                   <div className="detalle">
-                    {formatearHora(v.fecha)} · {v.tipo_combustible} · {v.cantidad_litros.toFixed(2)} L
+                    {formatearHora(v.fecha)} · {v.combustible_nombre} · {v.cantidad_litros.toFixed(2)} L
                     {v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}
                   </div>
                 </div>

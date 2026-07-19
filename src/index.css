@@ -218,6 +218,38 @@ select option { background-color: var(--surface); color: var(--text); }
 }
 .segmentado button.activo[data-tono="fiado"] { color: var(--accent-dark); }
 
+/* Selector de combustible: crece con el catálogo sin rediseñarse */
+.grilla-combustibles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 8px;
+}
+.chip-combustible {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text);
+  text-align: left;
+  min-width: 0;
+}
+.chip-combustible.activo { border-color: var(--accent); background-color: var(--surface-2); }
+.chip-combustible:disabled { opacity: 0.45; }
+.chip-combustible .nombre {
+  font-weight: 700;
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.chip-combustible .precio { font-size: 13px; color: var(--accent); font-weight: 600; }
+.chip-combustible .stock { font-size: 11.5px; color: var(--text-muted); }
+
 /* ═══════════════ SUPERFICIES ═══════════════ */
 .card {
   background-color: var(--surface);

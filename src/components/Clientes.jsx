@@ -270,7 +270,7 @@ export function Clientes() {
                         <div style={{ minWidth: 0 }}>
                           <strong style={{ fontSize: 16, color: 'var(--accent)' }}>{formatearMonto(v.saldo)}</strong>
                           <div className="detalle">
-                            {formatearFecha(v.fecha)} · {v.tipo_combustible} · {v.cantidad_litros.toFixed(2)} L
+                            {formatearFecha(v.fecha)} · {v.combustible_nombre} · {v.cantidad_litros.toFixed(2)} L
                             {v.cobrado > 0.01 && <> · pagó {formatearMonto(v.cobrado)} de {formatearMonto(v.total)}</>}
                           </div>
                         </div>
@@ -303,7 +303,7 @@ export function Clientes() {
                     {historial.map((v) => (
                       <tr key={v.id}>
                         <td>{formatearFecha(v.fecha)}</td>
-                        <td>{v.tipo_combustible}</td>
+                        <td>{v.combustible_nombre}</td>
                         <td>{v.cantidad_litros.toFixed(2)} L</td>
                         <td><strong>{formatearMonto(v.total)}</strong></td>
                         <td>
@@ -528,7 +528,7 @@ function CobroModal({ cobro, fiadosAbiertos, onCerrar, onListo, onError }) {
         {esVenta ? (
           <>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              {formatearFecha(cobro.venta.fecha)} · {cobro.venta.tipo_combustible} · {cobro.venta.cantidad_litros.toFixed(2)} L
+              {formatearFecha(cobro.venta.fecha)} · {cobro.venta.combustible_nombre} · {cobro.venta.cantidad_litros.toFixed(2)} L
             </div>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', marginTop: 3 }}>
               Debe {formatearMonto(maximo)}

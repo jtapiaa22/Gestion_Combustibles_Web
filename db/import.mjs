@@ -167,14 +167,26 @@ async function main() {
   const idNuevoDe = (idViejo) => claveANuevoId.get(mapaViejoANuevo.get(idViejo)) ?? null;
   console.log(`    ${nuevosClientes.length} insertados`);
 
-  // ── 6. Stock y compras ──────────────────────────────────────
-  console.log('\n[6] Actualizando stock e insertando compras...');
+  // ── 6. Combustibles y compras ───────────────────────────────
+  // En la base vieja el combustible era un texto; en la nueva es una
+  // fila del catálogo. Acá se mapea texto -> id.
+  console.log('\n[6] Actualizando combustibles e insertando compras...');
+
+  const catalogo = alzar(await destino.from('combustibles').select('id, nombre'));
+  const idCombustible = new Map(catalogo.map((c) => [c.nombre.toLowerCase(), c.id]));
+
+  const combustibleNuevoDe = (nombre) => {
+    const id = idCombustible.get((nombre || '').trim().toLowerCase());
+    if (!id) throw new Error(`El combustible "${nombre}" no existe en la base nueva. Crealo antes de importar.`);
+    return id;
+  };
+
   for (const s of stockViejo) {
     alzar(
-      await destino.from('stock')
+      await destino.from('combustibles')
         .update({ cantidad_litros: s.cantidad_litros, precio_por_litro: s.precio_por_litro })
-        .eq('tipo_combustible', s.tipo_combustible)
-        .select()
+        .eq('id', combustibleNuevoDe(s.tipo_combustible))
+        .select('id')
     );
   }
   if (comprasRecientes.length) {
@@ -182,14 +194,14 @@ async function main() {
       await destino.from('compras_stock').insert(
         comprasRecientes.map((c) => ({
           fecha: corregirFecha(c.fecha),
-          tipo_combustible: c.tipo_combustible,
+          combustible_id: combustibleNuevoDe(c.tipo_combustible),
           cantidad_litros: c.cantidad_litros,
           precio_por_litro_compra: c.precio_por_litro_compra,
         }))
-      ).select()
+      ).select('id')
     );
   }
-  console.log(`    stock actualizado, ${comprasRecientes.length} compras insertadas`);
+  console.log(`    ${stockViejo.length} combustibles actualizados, ${comprasRecientes.length} compras insertadas`);
 
   // ── 7. Fiados abiertos ──────────────────────────────────────
   console.log('\n[7] Insertando fiados abiertos...');
@@ -198,7 +210,7 @@ async function main() {
       fiados.map((f) => ({
         fecha: corregirFecha(f.fecha),
         cliente_id: idNuevoDe(f.cliente_id),
-        tipo_combustible: f.tipo_combustible,
+        combustible_id: combustibleNuevoDe(f.tipo_combustible),
         cantidad_litros: f.cantidad_litros,
         precio_por_litro: f.precio_por_litro,
         es_fiado: true,

@@ -36,35 +36,82 @@ const venta = (v) =>
 
 const ventas = (arr) => (arr || []).map(venta);
 
-// ── STOCK ───────────────────────────────────────────────────
-export const stockAPI = {
-  obtenerTodo: async () => {
-    const data = alzar(await supabase.from('stock').select('*').order('tipo_combustible'));
-    return data.map((s) => ({
-      ...s,
-      cantidad_litros: num(s.cantidad_litros),
-      precio_por_litro: num(s.precio_por_litro),
-    }));
+// ── COMBUSTIBLES ────────────────────────────────────────────
+// Esta tabla es a la vez el catálogo de lo que se vende y el estado
+// del tanque de cada uno. Agregar "Nafta Premium YPF" es una fila más.
+const combustible = (c) =>
+  c && {
+    ...c,
+    cantidad_litros: num(c.cantidad_litros),
+    precio_por_litro: num(c.precio_por_litro),
+  };
+
+export const combustiblesAPI = {
+  /** Por defecto sólo los que se venden hoy. */
+  obtenerTodos: async ({ incluirInactivos = false } = {}) => {
+    let q = supabase.from('combustibles').select('*').order('orden').order('nombre');
+    if (!incluirInactivos) q = q.eq('activo', true);
+    return alzar(await q).map(combustible);
   },
 
-  obtenerPorTipo: async (tipo) =>
-    alzar(await supabase.from('stock').select('*').eq('tipo_combustible', tipo).single()),
+  obtenerUno: async (id) =>
+    combustible(alzar(await supabase.from('combustibles').select('*').eq('id', id).single())),
+
+  crear: async ({ nombre, precioPorLitro = 0, cantidadLitros = 0, orden = 0 }) => {
+    const { data, error } = await supabase
+      .from('combustibles')
+      .insert({
+        nombre: (nombre || '').trim(),
+        precio_por_litro: precioPorLitro,
+        cantidad_litros: cantidadLitros,
+        orden,
+      })
+      .select()
+      .single();
+    if (error?.code === '23505') throw new Error(`Ya existe un combustible llamado "${nombre.trim()}"`);
+    if (error) throw error;
+    return combustible(data);
+  },
+
+  editar: async (id, { nombre, orden, activo }) => {
+    const cambios = {};
+    if (nombre !== undefined) cambios.nombre = nombre.trim();
+    if (orden !== undefined) cambios.orden = orden;
+    if (activo !== undefined) cambios.activo = activo;
+
+    const { error } = await supabase.from('combustibles').update(cambios).eq('id', id);
+    if (error?.code === '23505') throw new Error('Ya existe otro combustible con ese nombre');
+    if (error) throw error;
+  },
+
+  /**
+   * Dejar de vender uno no lo borra: las ventas viejas lo siguen
+   * necesitando. Sale de la lista y nada más.
+   */
+  desactivar: async (id) => {
+    const { data: enTanque } = await supabase
+      .from('combustibles').select('cantidad_litros').eq('id', id).single();
+    if (num(enTanque?.cantidad_litros) > 0.01) {
+      throw new Error(`Todavía quedan ${num(enTanque.cantidad_litros).toFixed(2)} litros en el tanque.`);
+    }
+    alzar(await supabase.from('combustibles').update({ activo: false }).eq('id', id).select('id'));
+  },
 
   // TODO: read-modify-write. Con un solo usuario no hay problema,
   // pero lo correcto sería una función RPC que incremente del lado
   // del servidor de forma atómica.
-  actualizarCantidad: async (tipo, delta) => {
+  actualizarCantidad: async (id, delta) => {
     const actual = alzar(
-      await supabase.from('stock').select('cantidad_litros').eq('tipo_combustible', tipo).single()
+      await supabase.from('combustibles').select('cantidad_litros').eq('id', id).single()
     );
     return alzar(
       await supabase
-        .from('stock')
+        .from('combustibles')
         .update({
           cantidad_litros: num(actual?.cantidad_litros) + delta,
           ultima_actualizacion: ahora(),
         })
-        .eq('tipo_combustible', tipo)
+        .eq('id', id)
         .select()
     );
   },
@@ -78,12 +125,12 @@ export const stockAPI = {
    * colaban los descuadres. Ahora alcanza con cambiar el precio: el
    * total es generado y el saldo se recalcula solo.
    */
-  actualizarPrecio: async (tipo, precio) => {
+  actualizarPrecio: async (id, precio) => {
     const actualizado = alzar(
       await supabase
-        .from('stock')
+        .from('combustibles')
         .update({ precio_por_litro: precio, ultima_actualizacion: ahora() })
-        .eq('tipo_combustible', tipo)
+        .eq('id', id)
         .select()
     );
 
@@ -94,7 +141,7 @@ export const stockAPI = {
       await supabase
         .from('ventas')
         .select('id')
-        .eq('tipo_combustible', tipo)
+        .eq('combustible_id', id)
         .eq('es_fiado', true)
         .is('saldado_en', null)
     );
@@ -109,7 +156,7 @@ export const stockAPI = {
       );
     }
 
-    return { stock: actualizado, fiadosRevaluados: abiertos?.length || 0 };
+    return { combustible: actualizado, fiadosRevaluados: abiertos?.length || 0 };
   },
 };
 
@@ -200,7 +247,7 @@ export const ventasAPI = {
    * métodos distintos. Por eso el método vive en cada pago.
    */
   registrar: async ({
-    clienteId, tipoCombustible, cantidadLitros, precioPorLitro,
+    clienteId, combustibleId, cantidadLitros, precioPorLitro,
     esFiado, metodoPago, titularTransferencia,
   }) => {
     if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
@@ -212,7 +259,7 @@ export const ventasAPI = {
         .insert({
           fecha: ahora(),
           cliente_id: clienteId || null,
-          tipo_combustible: tipoCombustible,
+          combustible_id: combustibleId,
           cantidad_litros: cantidadLitros,
           precio_por_litro: precioPorLitro,
           es_fiado: !!esFiado,
@@ -223,7 +270,7 @@ export const ventasAPI = {
         .single()
     );
 
-    await stockAPI.actualizarCantidad(tipoCombustible, -cantidadLitros);
+    await combustiblesAPI.actualizarCantidad(combustibleId, -cantidadLitros);
     return venta(nueva);
   },
 
@@ -403,7 +450,7 @@ export const ventasAPI = {
     const anterior = await ventasAPI.obtenerUna(ventaId);
     if (!anterior) throw new Error('Venta no encontrada');
 
-    const { tipoCombustible, cantidadLitros, precioPorLitro, metodoPago, clienteId, esFiado, titularTransferencia } = datos;
+    const { combustibleId, cantidadLitros, precioPorLitro, metodoPago, clienteId, esFiado, titularTransferencia } = datos;
 
     if (esFiado && !clienteId) throw new Error('Un fiado necesita un cliente');
     if (!esFiado && !metodoPago) throw new Error('Indicá cómo se cobró la venta');
@@ -414,12 +461,12 @@ export const ventasAPI = {
       throw new Error('El nuevo total quedaría por debajo de lo ya cobrado en esta venta.');
     }
 
-    // Stock: devolver lo viejo, descontar lo nuevo
-    if (tipoCombustible !== anterior.tipo_combustible) {
-      await stockAPI.actualizarCantidad(anterior.tipo_combustible, anterior.cantidad_litros);
-      await stockAPI.actualizarCantidad(tipoCombustible, -cantidadLitros);
+    // Tanque: devolver lo viejo, descontar lo nuevo
+    if (combustibleId !== anterior.combustible_id) {
+      await combustiblesAPI.actualizarCantidad(anterior.combustible_id, anterior.cantidad_litros);
+      await combustiblesAPI.actualizarCantidad(combustibleId, -cantidadLitros);
     } else if (cantidadLitros !== anterior.cantidad_litros) {
-      await stockAPI.actualizarCantidad(tipoCombustible, anterior.cantidad_litros - cantidadLitros);
+      await combustiblesAPI.actualizarCantidad(combustibleId, anterior.cantidad_litros - cantidadLitros);
     }
 
     // Si la corrección hace que el fiado valga más de lo ya cobrado,
@@ -433,7 +480,7 @@ export const ventasAPI = {
         .from('ventas')
         .update({
           cliente_id: clienteId || null,
-          tipo_combustible: tipoCombustible,
+          combustible_id: combustibleId,
           cantidad_litros: cantidadLitros,
           precio_por_litro: precioPorLitro,
           es_fiado: !!esFiado,
@@ -451,32 +498,32 @@ export const ventasAPI = {
     const v = await ventasAPI.obtenerUna(ventaId);
     if (!v) throw new Error('Venta no encontrada');
 
-    await stockAPI.actualizarCantidad(v.tipo_combustible, v.cantidad_litros);
+    await combustiblesAPI.actualizarCantidad(v.combustible_id, v.cantidad_litros);
     alzar(await supabase.from('ventas').delete().eq('id', ventaId).select('id'));
   },
 };
 
-// ── COMPRAS DE STOCK ────────────────────────────────────────
+// ── COMPRAS ─────────────────────────────────────────────────
 export const comprasAPI = {
-  registrar: async (tipo, cantidad, precioCompra) => {
+  registrar: async (combustibleId, cantidad, precioCompra) => {
     const compra = alzar(
       await supabase
         .from('compras_stock')
         .insert({
           fecha: ahora(),
-          tipo_combustible: tipo,
+          combustible_id: combustibleId,
           cantidad_litros: cantidad,
           precio_por_litro_compra: precioCompra,
         })
         .select()
         .single()
     );
-    await stockAPI.actualizarCantidad(tipo, cantidad);
+    await combustiblesAPI.actualizarCantidad(combustibleId, cantidad);
     return compra;
   },
 
   obtenerTodas: async () =>
-    alzar(await supabase.from('compras_stock').select('*').order('fecha', { ascending: false })),
+    alzar(await supabase.from('v_compras').select('*').order('fecha', { ascending: false })),
 
   obtenerTotalInvertido: async () => {
     const data = alzar(await supabase.from('compras_stock').select('total_compra'));
@@ -484,17 +531,25 @@ export const comprasAPI = {
   },
 };
 
-/** Último precio de compra por tipo — base del cálculo de ganancia. */
-const costoPorLitro = async (tipo) => {
-  const data = alzar(
+/**
+ * Último precio de compra de cada combustible, que es lo que se usa
+ * como costo para calcular la ganancia. Se traen todos de una: con N
+ * combustibles, una query por cada uno no escala.
+ */
+const costosPorCombustible = async () => {
+  const compras = alzar(
     await supabase
       .from('compras_stock')
-      .select('precio_por_litro_compra')
-      .eq('tipo_combustible', tipo)
+      .select('combustible_id, precio_por_litro_compra, fecha')
       .order('fecha', { ascending: false })
-      .limit(1)
   );
-  return num(data?.[0]?.precio_por_litro_compra);
+  const costo = {};
+  for (const c of compras) {
+    // Como vienen de más nueva a más vieja, la primera de cada
+    // combustible es la última compra.
+    costo[c.combustible_id] ??= num(c.precio_por_litro_compra);
+  }
+  return costo;
 };
 
 // ── CAJA ────────────────────────────────────────────────────
@@ -504,11 +559,10 @@ const costoPorLitro = async (tipo) => {
  * tres funciones y las tres se habían ido separando entre sí.
  */
 async function calcularTotales(desde, hasta) {
-  const [ventasRaw, pagosRaw, costoNafta, costoGasoil] = await Promise.all([
+  const [ventasRaw, pagosRaw, costos] = await Promise.all([
     supabase.from('v_ventas').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
     supabase.from('pagos_fiado').select('*, clientes(nombre)').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: false }),
-    costoPorLitro('Nafta'),
-    costoPorLitro('Gasoil'),
+    costosPorCombustible(),
   ]);
 
   const lista = ventas(alzar(ventasRaw));
@@ -529,9 +583,15 @@ async function calcularTotales(desde, hasta) {
   // El costo se cuenta sobre lo vendido al contado, igual que antes.
   // Un fiado cobrado hoy pero vendido en otro turno no suma costo
   // acá: su mercadería salió del tanque el día de la venta.
-  const costoVendido = sumar(alContado, (v) =>
-    v.cantidad_litros * (v.tipo_combustible === 'Nafta' ? costoNafta : costoGasoil)
-  );
+  const costoVendido = sumar(alContado, (v) => v.cantidad_litros * (costos[v.combustible_id] || 0));
+
+  // Desglose por combustible, armado sobre lo que efectivamente se
+  // vendió. Con dos combustibles o con seis, funciona igual.
+  const litrosPorCombustible = {};
+  for (const v of lista) {
+    const nombre = v.combustible_nombre || 'Sin nombre';
+    litrosPorCombustible[nombre] = (litrosPorCombustible[nombre] || 0) + v.cantidad_litros;
+  }
 
   return {
     ventas: lista,
@@ -541,8 +601,7 @@ async function calcularTotales(desde, hasta) {
     totalCobrado,
     totalFiadoNuevo: sumar(fiadas, (v) => v.total),
     totalFiadoCobrado: sumar(pagosFiado, (p) => p.monto),
-    litrosNafta: sumar(lista.filter((v) => v.tipo_combustible === 'Nafta'), (v) => v.cantidad_litros),
-    litrosGasoil: sumar(lista.filter((v) => v.tipo_combustible === 'Gasoil'), (v) => v.cantidad_litros),
+    litrosPorCombustible,
     ganancia: totalCobrado - costoVendido,
     cantidadVentas: lista.length,
     cantidadFiados: fiadas.length,
@@ -582,8 +641,7 @@ export const cajaAPI = {
           total_fiado_nuevo: t.totalFiadoNuevo,
           total_fiado_cobrado: t.totalFiadoCobrado,
           total_cobrado: t.totalCobrado,
-          litros_nafta: t.litrosNafta,
-          litros_gasoil: t.litrosGasoil,
+          litros_por_combustible: t.litrosPorCombustible,
           cantidad_ventas: t.cantidadVentas,
           cantidad_ventas_fiado: t.cantidadFiados,
           ganancia: t.ganancia,
