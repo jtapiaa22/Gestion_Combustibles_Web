@@ -6,6 +6,8 @@ import { Ventas } from './components/Ventas.jsx';
 import { Clientes } from './components/Clientes.jsx';
 import { Stock } from './components/Stock.jsx';
 import { Caja } from './components/Caja.jsx';
+import { Reportes } from './components/Reportes.jsx';
+import { Inicio } from './components/Inicio.jsx';
 
 const SECCIONES = [
   { id: 'ventas',   etiqueta: 'Ventas',   icono: '⛽' },
@@ -15,16 +17,6 @@ const SECCIONES = [
   { id: 'reportes', etiqueta: 'Reportes', icono: '📊' },
   { id: 'caja',     etiqueta: 'Caja',     icono: '🏦' },
 ];
-
-function EnConstruccion({ nombre }) {
-  return (
-    <div className="vacio" style={{ marginTop: 30 }}>
-      <div style={{ fontSize: 30, marginBottom: 8 }}>🚧</div>
-      <strong>{nombre}</strong> todavía no está migrada.<br />
-      Seguí usando la app vieja para esta parte.
-    </div>
-  );
-}
 
 function AppAutenticada() {
   const { tema, alternar } = useTema();
@@ -73,8 +65,10 @@ function AppAutenticada() {
           <Stock />
         ) : seccion === 'caja' ? (
           <Caja />
+        ) : seccion === 'reportes' ? (
+          <Reportes />
         ) : (
-          <EnConstruccion nombre={SECCIONES.find((s) => s.id === seccion)?.etiqueta} />
+          <Inicio irA={setSeccion} />
         )}
       </main>
     </>
