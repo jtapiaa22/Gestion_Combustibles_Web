@@ -1,49 +1,97 @@
-// Placeholder: las pantallas se migran en el próximo paso.
-// Por ahora sirve para verificar que la capa de datos compila y conecta.
 import { useEffect, useState } from 'react';
-import { stockAPI, clientesAPI } from './lib/api';
-import { formatearMonto } from './lib/fechas';
+import { supabase } from './lib/supabase.js';
+import { TemaProvider, useTema } from './hooks/useTema.jsx';
+import { Login } from './components/Login.jsx';
+import { Ventas } from './components/Ventas.jsx';
 
-export default function App() {
-  const [stock, setStock] = useState([]);
-  const [clientes, setClientes] = useState([]);
-  const [error, setError] = useState(null);
+const SECCIONES = [
+  { id: 'ventas',   etiqueta: 'Ventas',   icono: '⛽' },
+  { id: 'inicio',   etiqueta: 'Inicio',   icono: '🏠' },
+  { id: 'stock',    etiqueta: 'Stock',    icono: '📦' },
+  { id: 'clientes', etiqueta: 'Clientes', icono: '👥' },
+  { id: 'reportes', etiqueta: 'Reportes', icono: '📊' },
+  { id: 'caja',     etiqueta: 'Caja',     icono: '🏦' },
+];
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [s, c] = await Promise.all([stockAPI.obtenerTodo(), clientesAPI.obtenerTodos()]);
-        setStock(s);
-        setClientes(c);
-      } catch (e) {
-        setError(e.message);
-      }
-    })();
-  }, []);
+function EnConstruccion({ nombre }) {
+  return (
+    <div className="vacio" style={{ marginTop: 30 }}>
+      <div style={{ fontSize: 30, marginBottom: 8 }}>🚧</div>
+      <strong>{nombre}</strong> todavía no está migrada.<br />
+      Seguí usando la app vieja para esta parte.
+    </div>
+  );
+}
 
-  const conDeuda = clientes.filter((c) => c.deuda_real > 0.5);
-  const totalDeuda = conDeuda.reduce((s, c) => s + c.deuda_real, 0);
+function AppAutenticada() {
+  const { tema, alternar } = useTema();
+  const [seccion, setSeccion] = useState('ventas');
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 24, maxWidth: 720 }}>
-      <h1>Gestión Combustibles</h1>
-      <p style={{ color: '#71717a' }}>Verificación de la capa de datos unificada.</p>
+    <>
+      <header className="app-header">
+        <div className="app-marca">
+          <span>⛽</span>
+          <span className="nombre">Gestión Combustibles</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="theme-toggle" onClick={alternar} title="Cambiar tema">
+            {tema === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button
+            className="theme-toggle"
+            onClick={() => supabase.auth.signOut()}
+            title="Salir"
+          >
+            Salir
+          </button>
+        </div>
+      </header>
 
-      {error && <p style={{ color: '#dc2626' }}>Error: {error}</p>}
-
-      <h2>Stock</h2>
-      <ul>
-        {stock.map((s) => (
-          <li key={s.id}>
-            {s.tipo_combustible}: {s.cantidad_litros?.toFixed(2)} L a {formatearMonto(s.precio_por_litro)}/L
-          </li>
+      <nav className="app-nav">
+        {SECCIONES.map((s) => (
+          <button
+            key={s.id}
+            className={`nav-btn ${seccion === s.id ? 'activo' : ''}`}
+            onClick={() => setSeccion(s.id)}
+          >
+            <span className="icono">{s.icono}</span>
+            <span>{s.etiqueta}</span>
+          </button>
         ))}
-      </ul>
+      </nav>
 
-      <h2>Deuda viva</h2>
-      <p>
-        {conDeuda.length} clientes · <strong>{formatearMonto(totalDeuda)}</strong>
-      </p>
-    </main>
+      <main className="app-main">
+        {seccion === 'ventas' ? (
+          <Ventas />
+        ) : (
+          <EnConstruccion nombre={SECCIONES.find((s) => s.id === seccion)?.etiqueta} />
+        )}
+      </main>
+    </>
+  );
+}
+
+export default function App() {
+  const [sesion, setSesion] = useState(undefined); // undefined = todavía no sabemos
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSesion(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => setSesion(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  return (
+    <TemaProvider>
+      {sesion === undefined ? (
+        <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', color: 'var(--text-muted)' }}>
+          Cargando…
+        </div>
+      ) : sesion ? (
+        <AppAutenticada />
+      ) : (
+        <Login />
+      )}
+    </TemaProvider>
   );
 }
