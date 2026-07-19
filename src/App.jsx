@@ -5,6 +5,7 @@ import { Login } from './components/Login.jsx';
 import { Ventas } from './components/Ventas.jsx';
 import { Clientes } from './components/Clientes.jsx';
 import { Stock } from './components/Stock.jsx';
+import { Caja } from './components/Caja.jsx';
 
 const SECCIONES = [
   { id: 'ventas',   etiqueta: 'Ventas',   icono: '⛽' },
@@ -70,6 +71,8 @@ function AppAutenticada() {
           <Clientes />
         ) : seccion === 'stock' ? (
           <Stock />
+        ) : seccion === 'caja' ? (
+          <Caja />
         ) : (
           <EnConstruccion nombre={SECCIONES.find((s) => s.id === seccion)?.etiqueta} />
         )}

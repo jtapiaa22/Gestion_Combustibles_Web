@@ -178,10 +178,15 @@ try {
   check('los pagos se borran en cascada', pagosHuerfanos.length === 0);
 
   // ── Caja ──────────────────────────────────────────────────
+  // Un turno completo de punta a punta. Es donde el sistema viejo
+  // estaba roto: la app de PC calculaba la ventana con offset y las
+  // ventas se guardaban sin él, así que los cierres daban cualquier
+  // cosa. Acá se verifica que la ventana agarre lo que tiene que
+  // agarrar y que las cuentas cierren.
   console.log('\ncaja');
-  const abierta0 = await cajaAPI.obtenerCajaAbierta();
-  if (abierta0) {
-    check('ya había una caja abierta (se deja como estaba)', true);
+  const yaAbierta = await cajaAPI.obtenerCajaAbierta();
+  if (yaAbierta) {
+    check('había una caja abierta: se saltea el test para no tocarla', true);
   } else {
     const caja = await cajaAPI.abrirCaja('smoke test');
     limpiar.push(() => supabase.from('sesiones_caja').delete().eq('id', caja.id));
@@ -191,12 +196,61 @@ try {
     try { await cajaAPI.abrirCaja('otra'); } catch (e) { dobleCaja = e.message; }
     check('impide dos cajas abiertas a la vez', !!dobleCaja, dobleCaja || 'no lanzó error');
 
-    const resumen = await cajaAPI.obtenerResumen(caja.id);
-    check('calcula el resumen', resumen && typeof resumen.totalCobrado === 'number');
+    // Un turno: efectivo, transferencia, un fiado, y un cobro parcial
+    // de ese fiado en efectivo.
+    const vEfectivo = await ventasAPI.registrar({
+      combustibleId: nafta0.id, cantidadLitros: 3, precioPorLitro: 1000,
+      esFiado: false, metodoPago: 'Efectivo',
+    });
+    const vTransf = await ventasAPI.registrar({
+      combustibleId: nafta0.id, cantidadLitros: 2, precioPorLitro: 1000,
+      esFiado: false, metodoPago: 'Transferencia',
+    });
+    const vFiado = await ventasAPI.registrar({
+      clienteId: cli.id, combustibleId: nafta0.id, cantidadLitros: 10, precioPorLitro: 1000, esFiado: true,
+    });
+    for (const v of [vEfectivo, vTransf, vFiado]) {
+      limpiar.push(() => supabase.from('ventas').delete().eq('id', v.id));
+    }
+    await ventasAPI.registrarPago(vFiado.id, 4000, 'Efectivo');
 
-    await cajaAPI.cerrarCaja(caja.id, 'fin smoke');
-    const trasCierre = await cajaAPI.obtenerCajaAbierta();
-    check('al cerrar no queda ninguna abierta', trasCierre === null);
+    const r = await cajaAPI.obtenerResumen(caja.id);
+    check('la ventana agarra las 3 ventas del turno', r.cantidadVentas === 3, `cantidadVentas=${r.cantidadVentas}`);
+    check('separa efectivo de transferencia',
+      cerca(r.totalEfectivo, 3000) && cerca(r.totalTransferencia, 2000),
+      `efectivo=${r.totalEfectivo} transf=${r.totalTransferencia}`);
+    check('cuenta lo fiado aparte de lo cobrado', cerca(r.totalFiadoNuevo, 10000), `fiadoNuevo=${r.totalFiadoNuevo}`);
+    check('registra el cobro de fiado del turno', cerca(r.totalFiadoCobrado, 4000), `fiadoCobrado=${r.totalFiadoCobrado}`);
+
+    // Lo que de verdad importa al cerrar: cuánta plata hay en el cajón
+    check('el efectivo en caja suma ventas + fiados cobrados en efectivo',
+      cerca(r.efectivoEnCaja, 7000), `efectivoEnCaja=${r.efectivoEnCaja} (esperado 3000+4000)`);
+    check('un fiado no cobrado NO cuenta como plata en el cajón',
+      !cerca(r.efectivoEnCaja, 17000));
+
+    check('desglosa los litros por combustible',
+      cerca(r.litrosPorCombustible['Nafta'] || 0, 15), `litros=${JSON.stringify(r.litrosPorCombustible)}`);
+
+    const cerrado = await cajaAPI.cerrarCaja(caja.id, 'fin smoke');
+    check('al cerrar no queda ninguna abierta', (await cajaAPI.obtenerCajaAbierta()) === null);
+
+    // Los totales quedan congelados en la fila, no se recalculan
+    const guardada = (await cajaAPI.obtenerHistorial()).find((s) => s.id === caja.id);
+    check('guarda los totales del cierre',
+      cerca(Number(guardada.total_efectivo), 3000) && cerca(Number(guardada.total_cobrado), 5000),
+      `efectivo=${guardada.total_efectivo} cobrado=${guardada.total_cobrado}`);
+    check('guarda el desglose por combustible',
+      cerca(Number(guardada.litros_por_combustible?.Nafta || 0), 15),
+      `jsonb=${JSON.stringify(guardada.litros_por_combustible)}`);
+
+    // Borrar una venta después del cierre no debe mover el registro
+    await ventasAPI.eliminar(vEfectivo.id);
+    const trasBorrar = (await cajaAPI.obtenerHistorial()).find((s) => s.id === caja.id);
+    check('el cierre no cambia si después se borra una venta',
+      cerca(Number(trasBorrar.total_efectivo), 3000), `efectivo=${trasBorrar.total_efectivo}`);
+
+    await ventasAPI.eliminar(vTransf.id);
+    await ventasAPI.eliminar(vFiado.id);
   }
 
   // ── Catálogo de combustibles ──────────────────────────────
