@@ -37,10 +37,12 @@ export function Inicio({ irA }) {
   useEffect(() => {
     (async () => {
       try {
-        const [combustibles, clientes, ventas, caja] = await Promise.all([
+        const hoy = hoyAR();
+        const [combustibles, clientes, ventas, pagosHoy, caja] = await Promise.all([
           combustiblesAPI.obtenerTodos(),
           clientesAPI.obtenerTodos(),
           ventasAPI.obtenerTodas(),
+          ventasAPI.obtenerPagosPorFecha(hoy, hoy),
           cajaAPI.obtenerCajaAbierta(),
         ]);
 
@@ -49,8 +51,11 @@ export function Inicio({ irA }) {
           combustibles,
           caja,
           ultimas: ventas.slice(0, 6),
-          cobradoHoy: deHoy.filter((v) => !v.es_fiado).reduce((s, v) => s + v.total, 0),
-          fiadoHoy: deHoy.filter((v) => v.es_fiado).reduce((s, v) => s + v.total, 0),
+          // Lo cobrado sale de los pagos, no del tipo de venta: un fiado
+          // con entrega mete plata igual. Y lo fiado es lo que quedaron
+          // debiendo, no lo que se vendió a crédito.
+          cobradoHoy: pagosHoy.reduce((s, p) => s + p.monto, 0),
+          fiadoHoy: deHoy.filter((v) => v.es_fiado).reduce((s, v) => s + v.saldo, 0),
           ventasHoy: deHoy.length,
           deuda: clientes.reduce((s, c) => s + c.debe, 0),
           deudores: clientes.filter((c) => c.debe > 0.5).length,
@@ -113,13 +118,13 @@ export function Inicio({ irA }) {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <Tarjeta
-          etiqueta="COBRADO HOY"
+          etiqueta="ENTRÓ HOY"
           valor={formatearMonto(datos.cobradoHoy)}
           detalle={`${datos.ventasHoy} ${datos.ventasHoy === 1 ? 'venta' : 'ventas'}`}
           color="var(--success)"
         />
         {datos.fiadoHoy > 0 && (
-          <Tarjeta etiqueta="FIADO HOY" valor={formatearMonto(datos.fiadoHoy)} color="var(--accent)" />
+          <Tarjeta etiqueta="QUEDARON DEBIENDO" valor={formatearMonto(datos.fiadoHoy)} color="var(--accent)" />
         )}
         <Tarjeta
           etiqueta="LE DEBEN"

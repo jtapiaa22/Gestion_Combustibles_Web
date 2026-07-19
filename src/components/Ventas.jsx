@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { combustiblesAPI, clientesAPI, ventasAPI, cajaAPI } from '../lib/api.js';
-import { formatearMonto, formatearHora, esHoy } from '../lib/fechas.js';
+import { formatearMonto, formatearHora, esHoy, hoyAR } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
 import { useEsEscritorio } from '../hooks/useAncho.js';
 
@@ -30,6 +30,7 @@ export function Ventas() {
   const [combustibles, setCombustibles] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [ventasHoy, setVentasHoy] = useState([]);
+  const [pagosHoy, setPagosHoy] = useState([]);
   const [caja, setCaja] = useState(null);
   const [cargando, setCargando] = useState(true);
 
@@ -46,15 +47,18 @@ export function Ventas() {
   // ── Carga ─────────────────────────────────────────────────
   const cargar = async () => {
     try {
-      const [cbs, c, v, cj] = await Promise.all([
+      const hoy = hoyAR();
+      const [cbs, c, v, pg, cj] = await Promise.all([
         combustiblesAPI.obtenerTodos(),
         clientesAPI.obtenerTodos(),
         ventasAPI.obtenerTodas(),
+        ventasAPI.obtenerPagosPorFecha(hoy, hoy),
         cajaAPI.obtenerCajaAbierta(),
       ]);
       setCombustibles(cbs);
       setClientes(c);
       setVentasHoy(v.filter((x) => esHoy(x.fecha)));
+      setPagosHoy(pg);
       setCaja(cj);
       // Si todavía no hay uno elegido, arrancar por el primero
       setForm((f) => (f.combustibleId ? f : { ...f, combustibleId: cbs[0]?.id ?? null }));
@@ -112,8 +116,11 @@ export function Ventas() {
   const puedeRegistrar = litros > 0 && !problema && !registrando;
 
   const clienteElegido = clientes.find((c) => c.id === form.clienteId);
-  const cobradoHoy = ventasHoy.filter((v) => !v.es_fiado).reduce((s, v) => s + v.total, 0);
-  const fiadoHoy = ventasHoy.filter((v) => v.es_fiado).reduce((s, v) => s + v.total, 0);
+  // Lo cobrado sale de los pagos del día, no del tipo de venta: un
+  // fiado con entrega mete plata en el cajón igual. Y lo fiado es lo
+  // que quedaron debiendo, no lo que se vendió a crédito.
+  const cobradoHoy = pagosHoy.reduce((s, p) => s + p.monto, 0);
+  const fiadoHoy = ventasHoy.filter((v) => v.es_fiado).reduce((s, v) => s + v.saldo, 0);
 
   // ── Acciones ──────────────────────────────────────────────
   const registrar = async () => {
@@ -599,6 +606,9 @@ export function Ventas() {
                   <div className="detalle">
                     {formatearHora(v.fecha)} · {v.combustible_nombre} · {v.cantidad_litros.toFixed(2)} L
                     {v.cliente_nombre ? ` · ${v.cliente_nombre}` : ''}
+                    {v.es_fiado && v.cobrado > 0.01 && (
+                      <> · entregó {formatearMonto(v.cobrado)}, debe {formatearMonto(v.saldo)}</>
+                    )}
                   </div>
                 </div>
               ))}
