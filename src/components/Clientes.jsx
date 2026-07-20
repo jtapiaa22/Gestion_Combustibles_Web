@@ -115,19 +115,23 @@ export function Clientes() {
     <div className="fade-in">
       <Notificacion />
 
-      {/* Resumen */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div className="card" style={{ flex: '1 1 150px', padding: 14 }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEUDA TOTAL</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: deudaTotal > 0 ? 'var(--accent)' : 'var(--text)' }}>
-            {formatearMonto(deudaTotal)}
+      {/* Resumen. En el teléfono desaparece al abrir un cliente: son
+          totales de la lista, y ahí ocupan el espacio que necesita lo
+          que se vino a ver, que es cuánto debe ESE cliente. */}
+      {(esEscritorio || !seleccionado) && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div className="card" style={{ flex: '1 1 150px', padding: 14 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEUDA TOTAL</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: deudaTotal > 0 ? 'var(--accent)' : 'var(--text)' }}>
+              {formatearMonto(deudaTotal)}
+            </div>
+          </div>
+          <div className="card" style={{ flex: '1 1 150px', padding: 14 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEBEN / TOTAL</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{deudores} <span style={{ color: 'var(--text-muted)', fontSize: '1.125rem' }}>/ {clientes.length}</span></div>
           </div>
         </div>
-        <div className="card" style={{ flex: '1 1 150px', padding: 14 }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>DEBEN / TOTAL</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{deudores} <span style={{ color: 'var(--text-muted)', fontSize: '1.125rem' }}>/ {clientes.length}</span></div>
-        </div>
-      </div>
+      )}
 
       <div className="md-layout">
         {/* ══════════ Lista ══════════ */}
@@ -207,28 +211,10 @@ export function Clientes() {
               </button>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
-              <h2 style={{ fontSize: '1.3125rem', fontWeight: 700 }}>{seleccionado.nombre}</h2>
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <button
-                  onClick={() => setFormCliente({ ...seleccionado })}
-                  className="theme-toggle"
-                  title="Editar"
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() => setABorrar(seleccionado)}
-                  className="theme-toggle"
-                  style={{ color: 'var(--danger)' }}
-                  title="Eliminar"
-                >
-                  Borrar
-                </button>
-              </div>
-            </div>
-
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem', marginBottom: 16 }}>
+            {/* Nombre y contacto en una línea: lo que se vino a ver es
+                cuánto debe, no el teléfono. */}
+            <h2 style={{ fontSize: '1.3125rem', fontWeight: 700, marginBottom: 2 }}>{seleccionado.nombre}</h2>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem', marginBottom: 14 }}>
               {[seleccionado.telefono, seleccionado.direccion].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
             </div>
 
@@ -245,9 +231,11 @@ export function Clientes() {
                       en {fiadosAbiertos.length} {fiadosAbiertos.length === 1 ? 'fiado' : 'fiados'}
                     </div>
                   </div>
+                  {/* Al envolverse en pantalla angosta ocupa el ancho
+                      completo, en vez de quedar como un botón perdido. */}
                   <button
                     onClick={() => setCobro({ tipo: 'cliente', cliente: seleccionado })}
-                    style={{ padding: '12px 20px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontSize: '0.9375rem' }}
+                    style={{ flex: '1 1 130px', padding: '13px 20px', borderRadius: 'var(--radius)', backgroundColor: 'var(--success)', color: 'white', fontSize: '0.9375rem', fontWeight: 700 }}
                   >
                     Cobrar
                   </button>
@@ -286,6 +274,25 @@ export function Clientes() {
                 </div>
               </>
             )}
+
+            {/* Datos del cliente: acciones que se usan cada tanto, así
+                que van después de la plata y no compitiendo con ella. */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              <button
+                onClick={() => setFormCliente({ ...seleccionado })}
+                className="theme-toggle"
+                style={{ flex: 1, padding: 10 }}
+              >
+                Editar datos
+              </button>
+              <button
+                onClick={() => setABorrar(seleccionado)}
+                className="theme-toggle"
+                style={{ flex: 1, padding: 10, color: 'var(--danger)' }}
+              >
+                Borrar cliente
+              </button>
+            </div>
 
             {/* Historial */}
             <h3 className="titulo-seccion" style={{ marginBottom: 9 }}>Historial</h3>
