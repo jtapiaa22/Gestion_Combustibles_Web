@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { combustiblesAPI, comprasAPI } from '../lib/api.js';
 import { formatearMonto, formatearFecha, formatearFechaHora } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
+import { useEsEscritorio } from '../hooks/useAncho.js';
 import { Modal } from './Modal.jsx';
 
 const STOCK_BAJO = 100; // litros
@@ -477,6 +478,7 @@ function CambioPrecioModal({ datos, onCerrar, onListo, onError }) {
 
 // ══════════════════════════════════════════════════════════
 function ComprasVista({ combustibles, compras, cargando, onRegistrada, onError }) {
+  const esEscritorio = useEsEscritorio();
   const [form, setForm] = useState({ combustibleId: null, litros: '', precio: '' });
   const [confirmando, setConfirmando] = useState(false);
   const [registrando, setRegistrando] = useState(false);
@@ -590,7 +592,7 @@ function ComprasVista({ combustibles, compras, cargando, onRegistrada, onError }
           <div className="vacio">Cargando…</div>
         ) : compras.length === 0 ? (
           <div className="vacio">Todavía no registraste ninguna compra</div>
-        ) : (
+        ) : esEscritorio ? (
           <div className="tabla-scroll">
             <table>
               <thead>
@@ -608,6 +610,22 @@ function ComprasVista({ combustibles, compras, cargando, onRegistrada, onError }
                 ))}
               </tbody>
             </table>
+          </div>
+        ) : (
+          <div className="lista-tarjetas" style={{ gap: 7 }}>
+            {compras.map((c) => (
+              <div key={c.id} className="venta-tarjeta">
+                <div className="fila">
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ fontSize: '0.9688rem' }}>{formatearMonto(c.total_compra)}</strong>
+                    <div className="detalle">
+                      {formatearFecha(c.fecha)} · {c.combustible_nombre}
+                      {' · '}{Number(c.cantidad_litros).toFixed(2)} L a {formatearMonto(c.precio_por_litro_compra)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

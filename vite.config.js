@@ -57,6 +57,8 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
-  server: { port: 5173 },
+  // host: true expone el server a la red local, así se puede probar
+  // desde el teléfono sin deployar. Sólo afecta a `npm run dev`.
+  server: { port: 5173, host: true },
   build: { outDir: 'dist' },
 });

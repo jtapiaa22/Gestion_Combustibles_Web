@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { cajaAPI } from '../lib/api.js';
 import { formatearMonto, formatearFechaHora, formatearHora, formatearFecha } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
+import { useEsEscritorio } from '../hooks/useAncho.js';
 import { Modal } from './Modal.jsx';
 
 const REFRESCO_MS = 30000;
@@ -508,6 +509,7 @@ function Historial({ historial, cargando, onVer }) {
  * turno y no deben moverse aunque después se edite una venta.
  */
 function DetalleSesion({ sesion, datos }) {
+  const esEscritorio = useEsEscritorio();
   const litros = sesion.litros_por_combustible || datos.litrosPorCombustible || {};
   const movimientos = [
     ...datos.ventas.map((v) => ({ tipo: 'venta', fecha: v.fecha, dato: v })),
@@ -586,6 +588,41 @@ function DetalleSesion({ sesion, datos }) {
       </h3>
       {movimientos.length === 0 ? (
         <div className="vacio">Sin movimientos</div>
+      ) : !esEscritorio ? (
+        /* Dentro de un modal en el teléfono, una tabla de cuatro
+           columnas es ilegible: hay que deslizarla para el costado. */
+        <div className="lista-tarjetas" style={{ gap: 7 }}>
+          {movimientos.map((m) => (
+            <div key={`${m.tipo}-${m.dato.id}`} className="venta-tarjeta">
+              <div className="fila">
+                <div style={{ minWidth: 0 }}>
+                  <strong style={{ fontSize: '0.9688rem' }}>
+                    {formatearMonto(m.tipo === 'venta' ? m.dato.total : m.dato.monto)}
+                  </strong>
+                  <div className="detalle">
+                    {formatearHora(m.fecha)}
+                    {m.tipo === 'venta'
+                      ? ` · ${m.dato.combustible_nombre} · ${m.dato.cantidad_litros.toFixed(2)} L`
+                      : ' · cobro de fiado'}
+                    {m.dato.cliente_nombre ? ` · ${m.dato.cliente_nombre}` : ''}
+                  </div>
+                </div>
+                <span
+                  className="badge"
+                  style={{
+                    flexShrink: 0,
+                    backgroundColor:
+                      m.tipo === 'pago' ? 'var(--blue)'
+                      : m.dato.es_fiado ? 'var(--accent-dark)'
+                      : 'var(--success)',
+                  }}
+                >
+                  {m.tipo === 'pago' ? m.dato.metodo_pago : m.dato.es_fiado ? 'Fiado' : m.dato.metodos_pago}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="tabla-scroll">
           <table>

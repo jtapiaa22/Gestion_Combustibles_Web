@@ -300,7 +300,7 @@ export function Clientes() {
               <div className="vacio">Cargando…</div>
             ) : historial.length === 0 ? (
               <div className="vacio">Sin compras registradas</div>
-            ) : (
+            ) : esEscritorio ? (
               <div className="tabla-scroll">
                 <table>
                   <thead>
@@ -328,6 +328,34 @@ export function Clientes() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            ) : (
+              /* En el teléfono, tarjetas: una tabla de cinco columnas
+                 obliga a deslizar para el costado para leerla. */
+              <div className="lista-tarjetas" style={{ gap: 7 }}>
+                {historial.map((v) => (
+                  <div key={v.id} className="venta-tarjeta">
+                    <div className="fila">
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ fontSize: '0.9688rem' }}>{formatearMonto(v.total)}</strong>
+                        <div className="detalle">
+                          {formatearFecha(v.fecha)} · {v.combustible_nombre} · {v.cantidad_litros.toFixed(2)} L
+                        </div>
+                      </div>
+                      {!v.es_fiado ? (
+                        <span className="badge" style={{ flexShrink: 0, backgroundColor: 'var(--success)' }}>
+                          {v.metodos_pago}
+                        </span>
+                      ) : v.pagado ? (
+                        <span className="badge" style={{ flexShrink: 0, backgroundColor: 'var(--blue)' }}>Saldado</span>
+                      ) : (
+                        <span className="badge" style={{ flexShrink: 0, backgroundColor: 'var(--accent-dark)' }}>
+                          debe {formatearMonto(v.saldo)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
