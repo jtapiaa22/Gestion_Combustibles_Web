@@ -18,7 +18,7 @@ function duracion(desde, hasta = new Date()) {
   return `${d} ${d === 1 ? 'día' : 'días'} ${h % 24} h`;
 }
 
-function Metrica({ etiqueta, valor, color, chico }) {
+function Metrica({ etiqueta, valor, sub, color, chico }) {
   return (
     <div className="card" style={{ padding: 14, flex: '1 1 140px', minWidth: 0 }}>
       <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '0.04em' }}>
@@ -27,6 +27,9 @@ function Metrica({ etiqueta, valor, color, chico }) {
       <div style={{ fontSize: chico ? '1.125rem' : '1.375rem', fontWeight: 700, color: color || 'var(--text)', marginTop: 2 }}>
         {valor}
       </div>
+      {sub && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 1 }}>{sub}</div>
+      )}
     </div>
   );
 }
@@ -268,8 +271,27 @@ export function Caja() {
             })()}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-              <Metrica etiqueta="TRANSFERENCIAS" valor={formatearMonto(resumen.totalTransferencia + resumen.fiadoCobradoTransferencia)} chico />
-              <Metrica etiqueta="SE FIÓ" valor={formatearMonto(resumen.totalFiadoNuevo)} color="var(--accent)" chico />
+              <Metrica
+                etiqueta="EFECTIVO"
+                valor={formatearMonto(resumen.totalEfectivo + resumen.fiadoCobradoEfectivo)}
+                sub={`${resumen.cantidadPagosEfectivo} ${resumen.cantidadPagosEfectivo === 1 ? 'cobro' : 'cobros'}`}
+                color="var(--success)"
+                chico
+              />
+              <Metrica
+                etiqueta="TRANSFERENCIA"
+                valor={formatearMonto(resumen.totalTransferencia + resumen.fiadoCobradoTransferencia)}
+                sub={`${resumen.cantidadPagosTransferencia} ${resumen.cantidadPagosTransferencia === 1 ? 'cobro' : 'cobros'}`}
+                color="var(--blue)"
+                chico
+              />
+              <Metrica
+                etiqueta="SE FIÓ"
+                valor={formatearMonto(resumen.totalFiadoNuevo)}
+                sub={`${resumen.cantidadFiados} ${resumen.cantidadFiados === 1 ? 'venta' : 'ventas'}`}
+                color="var(--accent)"
+                chico
+              />
               <Metrica etiqueta="GANANCIA" valor={formatearMonto(resumen.ganancia)} color="var(--success)" chico />
             </div>
 
@@ -394,9 +416,26 @@ function CajaAbierta({ sesion, resumen, onCerrar, onEditarFondo }) {
         </button>
       </div>
 
+      <h3 className="titulo-seccion" style={{ marginBottom: 9 }}>Cómo entró la plata</h3>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        <Metrica etiqueta="TRANSFERENCIAS" valor={formatearMonto(resumen.totalTransferencia + resumen.fiadoCobradoTransferencia)} />
-        <Metrica etiqueta="SE FIÓ" valor={formatearMonto(resumen.totalFiadoNuevo)} color="var(--accent)" />
+        <Metrica
+          etiqueta="EFECTIVO"
+          valor={formatearMonto(resumen.totalEfectivo + resumen.fiadoCobradoEfectivo)}
+          sub={`${resumen.cantidadPagosEfectivo} ${resumen.cantidadPagosEfectivo === 1 ? 'cobro' : 'cobros'}`}
+          color="var(--success)"
+        />
+        <Metrica
+          etiqueta="TRANSFERENCIA"
+          valor={formatearMonto(resumen.totalTransferencia + resumen.fiadoCobradoTransferencia)}
+          sub={`${resumen.cantidadPagosTransferencia} ${resumen.cantidadPagosTransferencia === 1 ? 'cobro' : 'cobros'}`}
+          color="var(--blue)"
+        />
+        <Metrica
+          etiqueta="SE FIÓ"
+          valor={formatearMonto(resumen.totalFiadoNuevo)}
+          sub={`${resumen.cantidadFiados} ${resumen.cantidadFiados === 1 ? 'venta' : 'ventas'}`}
+          color="var(--accent)"
+        />
         <Metrica etiqueta="GANANCIA" valor={formatearMonto(resumen.ganancia)} color="var(--success)" />
         <Metrica etiqueta="VENTAS" valor={String(resumen.cantidadVentas)} />
       </div>
@@ -567,7 +606,13 @@ function DetalleSesion({ sesion, datos }) {
         <Metrica etiqueta="COBRADO" valor={formatearMonto(sesion.total_cobrado)} color="var(--success)" chico />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        <Metrica etiqueta="SE FIÓ" valor={formatearMonto(sesion.total_fiado_nuevo)} color="var(--accent)" chico />
+        <Metrica
+          etiqueta="SE FIÓ"
+          valor={formatearMonto(sesion.total_fiado_nuevo)}
+          sub={sesion.cantidad_ventas_fiado != null ? `${sesion.cantidad_ventas_fiado} ${sesion.cantidad_ventas_fiado === 1 ? 'venta' : 'ventas'}` : undefined}
+          color="var(--accent)"
+          chico
+        />
         <Metrica etiqueta="FIADOS COBRADOS" valor={formatearMonto(sesion.total_fiado_cobrado)} color="var(--blue)" chico />
         <Metrica etiqueta="GANANCIA" valor={formatearMonto(sesion.ganancia)} color="var(--success)" chico />
       </div>

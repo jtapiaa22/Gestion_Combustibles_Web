@@ -712,6 +712,11 @@ async function calcularTotales(desde, hasta, fondoInicial = 0) {
   const fiadoEfectivo = sumar(pagosDeFiados.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto);
   const fiadoTransferencia = sumar(pagosDeFiados.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto);
 
+  // Cuántos cobros (no ventas) entraron por cada medio: una venta
+  // partida en efectivo + transferencia suma un cobro a cada uno.
+  const cantidadPagosEfectivo = pagos.filter((p) => p.metodo_pago === 'Efectivo').length;
+  const cantidadPagosTransferencia = pagos.filter((p) => p.metodo_pago === 'Transferencia').length;
+
   // El costo se cuenta sobre lo vendido al contado, igual que antes.
   // Un fiado cobrado hoy pero vendido en otro turno no suma costo
   // acá: su mercadería salió del tanque el día de la venta.
@@ -734,6 +739,8 @@ async function calcularTotales(desde, hasta, fondoInicial = 0) {
     totalEfectivo,
     totalTransferencia,
     totalCobrado,
+    cantidadPagosEfectivo,
+    cantidadPagosTransferencia,
     totalFiadoNuevo: sumar(fiadas, (v) => v.total),
     totalFiadoCobrado: fiadoEfectivo + fiadoTransferencia,
     fiadoCobradoEfectivo: fiadoEfectivo,

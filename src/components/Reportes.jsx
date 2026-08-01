@@ -89,11 +89,16 @@ export function Reportes() {
       porCombustible[k].ventas++;
     }
 
+    const pagosEfectivo = pagos.filter((p) => p.metodo_pago === 'Efectivo');
+    const pagosTransferencia = pagos.filter((p) => p.metodo_pago === 'Transferencia');
+
     return {
       // Una venta puede haberse pagado con los dos métodos a la vez,
       // así que el desglose sale de los pagos y no de la venta.
-      efectivo: suma(pagos.filter((p) => p.metodo_pago === 'Efectivo'), (p) => p.monto),
-      transferencia: suma(pagos.filter((p) => p.metodo_pago === 'Transferencia'), (p) => p.monto),
+      efectivo: suma(pagosEfectivo, (p) => p.monto),
+      transferencia: suma(pagosTransferencia, (p) => p.monto),
+      cantidadEfectivo: pagosEfectivo.length,
+      cantidadTransferencia: pagosTransferencia.length,
       fiado: suma(fiadas, (v) => v.total),
       sinCobrar: suma(fiadas.filter((v) => !v.pagado), (v) => v.saldo),
       cantidad: ventas.length,
@@ -207,20 +212,38 @@ export function Reportes() {
         <div className="vacio">Cargando…</div>
       ) : (
         <>
-          {/* Totales */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 10 }}>
-            <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
-              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>COBRADO</div>
-              <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--success)' }}>{formatearMonto(cobrado)}</div>
+          {/* Cobrado, separado por método */}
+          <h2 className="titulo-seccion" style={{ marginBottom: 9 }}>Cómo entró la plata</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 18 }}>
+            <div className="card" style={{ padding: 16, flex: '1 1 200px', borderLeft: '4px solid var(--success)' }}>
+              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>EFECTIVO</div>
+              <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--success)' }}>{formatearMonto(t.efectivo)}</div>
               <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                {formatearMonto(t.efectivo)} efectivo · {formatearMonto(t.transferencia)} transferencia
+                {t.cantidadEfectivo} {t.cantidadEfectivo === 1 ? 'cobro' : 'cobros'}
               </div>
             </div>
-            <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
+            <div className="card" style={{ padding: 16, flex: '1 1 200px', borderLeft: '4px solid var(--blue)' }}>
+              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>TRANSFERENCIA</div>
+              <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--blue)' }}>{formatearMonto(t.transferencia)}</div>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                {t.cantidadTransferencia} {t.cantidadTransferencia === 1 ? 'cobro' : 'cobros'}
+              </div>
+            </div>
+            <div className="card" style={{ padding: 16, flex: '1 1 200px', borderLeft: '4px solid var(--accent)' }}>
               <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>SE FIÓ</div>
               <div style={{ fontSize: '1.6875rem', fontWeight: 700, color: 'var(--accent)' }}>{formatearMonto(t.fiado)}</div>
               <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                {t.cantidadFiadas} ventas · {formatearMonto(t.sinCobrar)} todavía sin cobrar
+                {t.cantidadFiadas} {t.cantidadFiadas === 1 ? 'venta' : 'ventas'} · {formatearMonto(t.sinCobrar)} todavía sin cobrar
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 10 }}>
+            <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
+              <div style={{ fontSize: '0.7188rem', color: 'var(--text-secondary)', fontWeight: 700 }}>TOTAL COBRADO</div>
+              <div style={{ fontSize: '1.6875rem', fontWeight: 700 }}>{formatearMonto(cobrado)}</div>
+              <div style={{ fontSize: '0.7812rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                efectivo + transferencia
               </div>
             </div>
             <div className="card" style={{ padding: 16, flex: '1 1 200px' }}>
