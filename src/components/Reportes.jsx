@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { combustiblesAPI, clientesAPI, ventasAPI, comprasAPI } from '../lib/api.js';
-import { formatearMonto, formatearFecha, formatearHora, hoyAR } from '../lib/fechas.js';
+import { formatearMonto, formatearFecha, formatearHora, hoyAR, diaDe, mesDe, formatearDia, formatearMes } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
 import { useEsEscritorio } from '../hooks/useAncho.js';
 import { Modal } from './Modal.jsx';
@@ -104,6 +104,47 @@ export function Reportes() {
 
   const cobrado = t.efectivo + t.transferencia;
 
+  // Facturado por período, para el gráfico. Por día si el rango entra
+  // en un mes; por mes si es más largo (un "Todo" de un año no entra
+  // en barras diarias sin que se amontonen).
+  const grafico = useMemo(() => {
+    if (ventas.length === 0) return null;
+
+    const fechasVentas = ventas.map((v) => diaDe(v.fecha));
+    const d0 = desde || fechasVentas.reduce((min, f) => (f < min ? f : min), fechasVentas[0]);
+    const d1 = hasta || fechasVentas.reduce((max, f) => (f > max ? f : max), fechasVentas[0]);
+    const spanDias = Math.round((new Date(`${d1}T12:00:00`) - new Date(`${d0}T12:00:00`)) / 86400000) + 1;
+    const porDia = spanDias <= 31;
+
+    const totales = new Map();
+    for (const v of ventas) {
+      const clave = porDia ? diaDe(v.fecha) : mesDe(v.fecha);
+      totales.set(clave, (totales.get(clave) || 0) + v.total);
+    }
+
+    let claves;
+    if (porDia) {
+      claves = [];
+      let d = new Date(`${d0}T12:00:00`);
+      const fin = new Date(`${d1}T12:00:00`);
+      while (d <= fin) {
+        claves.push(d.toLocaleDateString('en-CA'));
+        d.setDate(d.getDate() + 1);
+      }
+    } else {
+      claves = [...totales.keys()].sort();
+    }
+
+    return {
+      porDia,
+      puntos: claves.map((clave) => ({
+        clave,
+        etiqueta: porDia ? formatearDia(clave) : formatearMes(clave),
+        monto: totales.get(clave) || 0,
+      })),
+    };
+  }, [ventas, desde, hasta]);
+
   // Las compras del período, para el contraste con lo vendido
   const comprasPeriodo = useMemo(() => {
     if (!desde || !hasta) return compras;
@@ -190,6 +231,11 @@ export function Reportes() {
               </div>
             </div>
           </div>
+
+          {/* Gráfico */}
+          {grafico && grafico.puntos.length > 1 && (
+            <GraficoVentas puntos={grafico.puntos} porDia={grafico.porDia} />
+          )}
 
           {/* Por combustible */}
           {t.porCombustible.length > 0 && (
@@ -354,6 +400,107 @@ export function Reportes() {
       </Modal>
     </div>
   );
+}
+
+// ══════════════════════════════════════════════════════════
+/**
+ * Barras de lo facturado por día o por mes. Una sola serie, así que
+ * usa el mismo naranja que la plata en el resto de la app: no hace
+ * falta paleta categórica para esto.
+ */
+function GraficoVentas({ puntos, porDia }) {
+  const [activo, setActivo] = useState(null);
+
+  const ANCHO = 720, ALTO = 200, PAD_IZQ = 60, PAD_DER = 12, PAD_ARR = 16, PAD_ABAJ = 26;
+  const anchoUtil = ANCHO - PAD_IZQ - PAD_DER;
+  const altoUtil = ALTO - PAD_ARR - PAD_ABAJ;
+
+  const max = Math.max(1, ...puntos.map((p) => p.monto));
+  const techo = escalaAmable(max);
+  const marcasY = [0, 0.25, 0.5, 0.75, 1].map((f) => techo * f);
+
+  const n = puntos.length;
+  const slot = anchoUtil / n;
+  const anchoBarra = Math.max(2, Math.min(24, slot - 4));
+  // Con pocas barras entran todas las etiquetas; con muchas, salteamos.
+  const paso = Math.ceil(n / (porDia ? 10 : 12));
+
+  const punto = activo != null ? puntos[activo] : null;
+
+  return (
+    <div className="card" style={{ padding: 16, marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+        <h2 className="titulo-seccion" style={{ margin: 0 }}>Ventas por {porDia ? 'día' : 'mes'}</h2>
+        <div style={{ fontSize: '0.8125rem', minHeight: '1.2em' }}>
+          {punto ? (
+            <>
+              <span style={{ color: 'var(--text-muted)' }}>{punto.etiqueta}: </span>
+              <strong style={{ color: 'var(--text)' }}>{formatearMonto(punto.monto)}</strong>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+        {marcasY.map((m, i) => {
+          const y = PAD_ARR + altoUtil - (m / techo) * altoUtil;
+          return (
+            <g key={i}>
+              <line x1={PAD_IZQ} x2={ANCHO - PAD_DER} y1={y} y2={y} stroke="var(--border)" strokeWidth="1" />
+              <text x={PAD_IZQ - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="var(--text-muted)">
+                {formatearMonto(m)}
+              </text>
+            </g>
+          );
+        })}
+
+        {puntos.map((p, i) => {
+          const cx = PAD_IZQ + slot * i + slot / 2;
+          const alturaBarra = (p.monto / techo) * altoUtil;
+          const y = PAD_ARR + altoUtil - alturaBarra;
+          const hover = activo === i;
+          return (
+            <g
+              key={p.clave}
+              tabIndex={0}
+              onMouseEnter={() => setActivo(i)}
+              onMouseLeave={() => setActivo((a) => (a === i ? null : a))}
+              onFocus={() => setActivo(i)}
+              onBlur={() => setActivo((a) => (a === i ? null : a))}
+              style={{ cursor: 'pointer', outline: 'none' }}
+            >
+              {/* Área invisible: el blanco de hover es toda la franja, no solo la barrita */}
+              <rect x={PAD_IZQ + slot * i} y={PAD_ARR} width={slot} height={altoUtil} fill="transparent" />
+              {p.monto > 0 && (
+                <path d={barraPath(cx - anchoBarra / 2, y, anchoBarra, Math.max(1, alturaBarra), 4)} fill="var(--accent)" fillOpacity={hover ? 1 : 0.85} />
+              )}
+              {i % paso === 0 && (
+                <text x={cx} y={ALTO - 8} textAnchor="middle" fontSize="10" fill="var(--text-muted)">
+                  {p.etiqueta}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/** Redondea el techo del eje Y a un número "lindo" (1, 2 o 5 × una potencia de 10). */
+function escalaAmable(valor) {
+  if (valor <= 0) return 1;
+  const potencia = Math.pow(10, Math.floor(Math.log10(valor)));
+  const normalizado = valor / potencia;
+  const paso = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 5 ? 5 : 10;
+  return paso * potencia;
+}
+
+/** Rectángulo con las puntas de arriba redondeadas y la base cuadrada,
+ *  apoyado en la línea base — así una barra se ve "parada", no flotando. */
+function barraPath(x, y, ancho, alto, radio) {
+  const r = Math.min(radio, ancho / 2, alto);
+  return `M${x},${y + alto} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + ancho - r},${y} Q${x + ancho},${y} ${x + ancho},${y + r} L${x + ancho},${y + alto} Z`;
 }
 
 // ══════════════════════════════════════════════════════════

@@ -64,6 +64,23 @@ export const esHoy = (iso) => diaDe(iso) === hoyAR();
 /** Dias completos que pasaron desde ese instante hasta hoy, en Argentina */
 export const diasDesde = (iso) => Math.floor((new Date(hoyAR()) - new Date(diaDe(iso))) / 86400000);
 
+/** YYYY-MM en hora argentina — para agrupar por mes (ej. el gráfico de Reportes). */
+export const mesDe = (iso) => diaDe(iso).slice(0, 7);
+
+/** "15/07" a partir de una clave YYYY-MM-DD. Sin pasar por Date(iso): esa
+ *  clave ya es un día, no un instante, y convertirla de vuelta corre el
+ *  riesgo de cruzar a UTC y mostrar el día anterior. */
+export const formatearDia = (claveDia) => {
+  const [anio, mes, dia] = claveDia.split('-').map(Number);
+  return new Date(anio, mes - 1, dia).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+};
+
+/** "jul 2026" a partir de una clave YYYY-MM. */
+export const formatearMes = (claveMes) => {
+  const [anio, mes] = claveMes.split('-').map(Number);
+  return new Date(anio, mes - 1, 1).toLocaleDateString('es-AR', { month: 'short', year: 'numeric' });
+};
+
 // ── Plata ───────────────────────────────────────────────────
 
 export const formatearMonto = (n) =>
