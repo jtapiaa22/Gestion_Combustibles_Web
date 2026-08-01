@@ -74,6 +74,30 @@ export function Clientes() {
     [historial]
   );
 
+  const litrosTotales = useMemo(
+    () => historial.reduce((s, v) => s + (v.cantidad_litros || 0), 0),
+    [historial]
+  );
+
+  // Litros de un fiado abierto que todavía no se pagaron. No es
+  // simplemente cantidad_litros: si ya pagó una parte en pesos, esa
+  // parte también es litros ya cubiertos, y hay que descontarlos.
+  const litrosDebidos = useMemo(
+    () => fiadosAbiertos.reduce(
+      (s, v) => s + (v.precio_por_litro > 0 ? v.saldo / v.precio_por_litro : v.cantidad_litros),
+      0
+    ),
+    [fiadosAbiertos]
+  );
+
+  // v_clientes.total_pagado solo suma ventas saldadas del todo: un fiado
+  // con un pago parcial no cuenta ahí. v.cobrado sí trae lo realmente
+  // cobrado en cada venta, parcial o no, así que sumarlo da la plata real.
+  const pagadoTotal = useMemo(
+    () => historial.reduce((s, v) => s + (v.cobrado || 0), 0),
+    [historial]
+  );
+
   // ── Acciones ──────────────────────────────────────────────
   const guardarCliente = async () => {
     if (!formCliente.nombre?.trim()) { mostrar('Poné el nombre', 'error'); return; }
@@ -216,6 +240,28 @@ export function Clientes() {
             <h2 style={{ fontSize: '1.3125rem', fontWeight: 700, marginBottom: 2 }}>{seleccionado.nombre}</h2>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.8438rem', marginBottom: 14 }}>
               {[seleccionado.telefono, seleccionado.direccion].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
+            </div>
+
+            {/* Resumen: cuántas compras hizo, cuánto llevó, cuánto pagó */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              <div className="sub-card" style={{ flex: '1 1 100px', padding: '9px 12px' }}>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontWeight: 600 }}>COMPRAS</div>
+                <div style={{ fontSize: '1.0625rem', fontWeight: 700 }}>{seleccionado.total_compras}</div>
+              </div>
+              <div className="sub-card" style={{ flex: '1 1 100px', padding: '9px 12px' }}>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontWeight: 600 }}>LITROS TOTALES</div>
+                <div style={{ fontSize: '1.0625rem', fontWeight: 700 }}>{litrosTotales.toFixed(2)} L</div>
+              </div>
+              <div className="sub-card" style={{ flex: '1 1 100px', padding: '9px 12px' }}>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontWeight: 600 }}>PAGADO</div>
+                <div style={{ fontSize: '1.0625rem', fontWeight: 700, color: 'var(--success)' }}>{formatearMonto(pagadoTotal)}</div>
+              </div>
+              {litrosDebidos > 0.005 && (
+                <div className="sub-card" style={{ flex: '1 1 100px', padding: '9px 12px' }}>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontWeight: 600 }}>LITROS DEBIDOS</div>
+                  <div style={{ fontSize: '1.0625rem', fontWeight: 700, color: 'var(--accent)' }}>{litrosDebidos.toFixed(2)} L</div>
+                </div>
+              )}
             </div>
 
             {/* Deuda */}
