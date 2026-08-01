@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { combustiblesAPI, comprasAPI } from '../lib/api.js';
 import { formatearMonto, formatearFecha, formatearFechaHora } from '../lib/fechas.js';
+import { STOCK_BAJO } from '../lib/config.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
 import { useEsEscritorio } from '../hooks/useAncho.js';
 import { Modal } from './Modal.jsx';
-
-const STOCK_BAJO = 100; // litros
 
 export function Stock() {
   const { mostrar, Notificacion } = useNotificacion();

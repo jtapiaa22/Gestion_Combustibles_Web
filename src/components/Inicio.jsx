@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { combustiblesAPI, clientesAPI, ventasAPI, cajaAPI } from '../lib/api.js';
 import { formatearMonto, formatearFecha, formatearHora, esHoy, hoyAR } from '../lib/fechas.js';
+import { STOCK_BAJO } from '../lib/config.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
-
-const STOCK_BAJO = 100;
 
 function Tarjeta({ etiqueta, valor, detalle, color, onClick }) {
   const Elemento = onClick ? 'button' : 'div';
