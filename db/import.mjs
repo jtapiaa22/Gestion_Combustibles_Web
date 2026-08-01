@@ -1,10 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
 //  import.mjs — Pasa el estado vivo de la base vieja a la nueva.
 //
-//  Lee: clientes, fiados abiertos, stock y la última compra de cada
-//  combustible. NO trae el historial: las ventas ya cobradas, los
-//  pagos viejos y los cierres de caja quedan en la base vieja, que
-//  no se toca nunca y funciona como archivo.
+//  Lee: clientes, fiados abiertos y los pagos parciales sobre esos
+//  fiados. NO trae el historial (ventas ya cobradas, pagos viejos,
+//  cierres de caja) ni stock/compras: el stock arranca de cero en
+//  la app nueva. La base vieja no se toca nunca y funciona como
+//  archivo.
 //
 //  La base de origen se abre SOLO PARA LECTURA. Este script no
 //  escribe una sola fila ahí.
@@ -70,26 +71,15 @@ async function main() {
 
   const clientesViejos = alzar(await origen.from('clientes').select('*').order('nombre'));
   const fiados = alzar(await origen.from('ventas').select('*').eq('pagado', false).order('fecha'));
-  const stockViejo = alzar(await origen.from('stock').select('*'));
 
   const idsFiados = fiados.map((f) => f.id);
   const pagosPrevios = idsFiados.length
     ? alzar(await origen.from('pagos_fiado').select('*').in('venta_id', idsFiados))
     : [];
 
-  const comprasRecientes = [];
-  for (const tipo of ['Nafta', 'Gasoil']) {
-    const c = alzar(
-      await origen.from('compras_stock').select('*').eq('tipo_combustible', tipo)
-        .order('fecha', { ascending: false }).limit(1)
-    );
-    if (c?.[0]) comprasRecientes.push(c[0]);
-  }
-
   console.log(`    ${clientesViejos.length} clientes`);
   console.log(`    ${fiados.length} fiados abiertos`);
   console.log(`    ${pagosPrevios.length} pagos parciales sobre esos fiados`);
-  console.log(`    ${comprasRecientes.length} compras (última de cada combustible)`);
 
   // ── 2. Normalizar y deduplicar clientes ─────────────────────
   console.log('\n[2] Normalizando nombres y deduplicando...');
@@ -131,8 +121,7 @@ async function main() {
   console.log(`    clientes      : ${porClave.size}`);
   console.log(`    ventas fiadas : ${fiados.length}  (deuda viva ${money(totalDeuda)})`);
   console.log(`    pagos         : ${pagosPrevios.length}`);
-  console.log(`    compras       : ${comprasRecientes.length}`);
-  console.log(`    stock         : ${stockViejo.map((s) => `${s.tipo_combustible} ${s.cantidad_litros}L @ ${money(s.precio_por_litro)}`).join(' | ')}`);
+  console.log('    (stock y compras NO se importan: arrancan de cero en la app nueva)');
 
   if (!EJECUTAR) {
     console.log('\n  Simulacro terminado. Nada fue escrito.');
@@ -167,10 +156,11 @@ async function main() {
   const idNuevoDe = (idViejo) => claveANuevoId.get(mapaViejoANuevo.get(idViejo)) ?? null;
   console.log(`    ${nuevosClientes.length} insertados`);
 
-  // ── 6. Combustibles y compras ───────────────────────────────
+  // ── 6. Mapeo de combustibles ─────────────────────────────────
   // En la base vieja el combustible era un texto; en la nueva es una
-  // fila del catálogo. Acá se mapea texto -> id.
-  console.log('\n[6] Actualizando combustibles e insertando compras...');
+  // fila del catálogo. Acá se mapea texto -> id (solo para poder
+  // insertar los fiados; stock y compras no se tocan).
+  console.log('\n[6] Mapeando combustibles...');
 
   const catalogo = alzar(await destino.from('combustibles').select('id, nombre'));
   const idCombustible = new Map(catalogo.map((c) => [c.nombre.toLowerCase(), c.id]));
@@ -180,28 +170,7 @@ async function main() {
     if (!id) throw new Error(`El combustible "${nombre}" no existe en la base nueva. Crealo antes de importar.`);
     return id;
   };
-
-  for (const s of stockViejo) {
-    alzar(
-      await destino.from('combustibles')
-        .update({ cantidad_litros: s.cantidad_litros, precio_por_litro: s.precio_por_litro })
-        .eq('id', combustibleNuevoDe(s.tipo_combustible))
-        .select('id')
-    );
-  }
-  if (comprasRecientes.length) {
-    alzar(
-      await destino.from('compras_stock').insert(
-        comprasRecientes.map((c) => ({
-          fecha: corregirFecha(c.fecha),
-          combustible_id: combustibleNuevoDe(c.tipo_combustible),
-          cantidad_litros: c.cantidad_litros,
-          precio_por_litro_compra: c.precio_por_litro_compra,
-        }))
-      ).select('id')
-    );
-  }
-  console.log(`    ${stockViejo.length} combustibles actualizados, ${comprasRecientes.length} compras insertadas`);
+  console.log(`    ${catalogo.length} combustibles en el catálogo nuevo`);
 
   // ── 7. Fiados abiertos ──────────────────────────────────────
   console.log('\n[7] Insertando fiados abiertos...');
@@ -214,7 +183,6 @@ async function main() {
         cantidad_litros: f.cantidad_litros,
         precio_por_litro: f.precio_por_litro,
         es_fiado: true,
-        metodo_pago: null, // un fiado se define al cobrarse, no al venderse
       }))
     ).select('id')
   );
@@ -226,7 +194,7 @@ async function main() {
   if (pagosPrevios.length) {
     console.log('\n[8] Insertando pagos parciales...');
     alzar(
-      await destino.from('pagos_fiado').insert(
+      await destino.from('pagos').insert(
         pagosPrevios.map((p) => ({
           venta_id: ventaNuevaDe.get(p.venta_id),
           cliente_id: idNuevoDe(p.cliente_id),
