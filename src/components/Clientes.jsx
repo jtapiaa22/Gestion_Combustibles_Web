@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { clientesAPI, ventasAPI } from '../lib/api.js';
-import { formatearMonto, formatearFecha, formatearFechaHora } from '../lib/fechas.js';
+import { formatearMonto, formatearFecha, formatearFechaHora, diasDesde } from '../lib/fechas.js';
 import { useNotificacion } from '../hooks/useNotificacion.jsx';
 import { useEsEscritorio } from '../hooks/useAncho.js';
 import { Modal } from './Modal.jsx';
+import { DEUDA_VIEJA_DIAS } from '../lib/config.js';
 
 export function Clientes() {
   const { mostrar, Notificacion } = useNotificacion();
@@ -13,6 +14,8 @@ export function Clientes() {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [soloDeudores, setSoloDeudores] = useState(false);
+  const [ordenAntiguedad, setOrdenAntiguedad] = useState(false);
+  const [fiadosPendientes, setFiadosPendientes] = useState([]);
 
   const [seleccionadoId, setSeleccionadoId] = useState(null);
   const [historial, setHistorial] = useState([]);
@@ -28,7 +31,9 @@ export function Clientes() {
   // ── Carga ─────────────────────────────────────────────────
   const cargarClientes = async () => {
     try {
-      setClientes(await clientesAPI.obtenerTodos());
+      const [cs, fp] = await Promise.all([clientesAPI.obtenerTodos(), ventasAPI.obtenerPendientes()]);
+      setClientes(cs);
+      setFiadosPendientes(fp);
     } catch (e) {
       mostrar(`No se pudieron cargar los clientes: ${e.message}`, 'error');
     } finally {
@@ -58,20 +63,45 @@ export function Clientes() {
     if (seleccionadoId) await cargarHistorial(seleccionadoId);
   };
 
+
+  const fechaMasViejaPorCliente = useMemo(() => {
+    const mapa = new Map();
+    for (const f of fiadosPendientes){
+      const actual = mapa.get(f.cliente_id);
+      if (!actual || new Date(f.fecha) < new Date(actual)) mapa.set(f.cliente_id, f.fecha);
+    }
+    return mapa;
+  }, [fiadosPendientes]);
+
   // ── Derivados ─────────────────────────────────────────────
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return clientes
       .filter((c) => (!q || c.nombre.toLowerCase().includes(q)) && (!soloDeudores || c.debe > 0.5))
-      .sort((a, b) => b.debe - a.debe || a.nombre.localeCompare(b.nombre));
-  }, [clientes, busqueda, soloDeudores]);
+      .sort((a, b) => {
+        if (!ordenAntiguedad) return b.debe - a.debe || a.nombre.localeCompare(b.nombre);
+        const fa = fechaMasViejaPorCliente.get(a.id);
+        const fb = fechaMasViejaPorCliente.get(b.id);
+        if (fa && fb) return new Date(fa) - new Date(fb);
+        return fa ? -1 : fb ? 1 : a.nombre.localeCompare(b.nombre);
+      });
+  }, [clientes, busqueda, soloDeudores, ordenAntiguedad, fechaMasViejaPorCliente]);
 
   const deudaTotal = clientes.reduce((s, c) => s + c.debe, 0);
   const deudores = clientes.filter((c) => c.debe > 0.5).length;
 
+  // Orden ascendente: lo necesita el modal de cobro, que aplica el
+  // pago del fiado más viejo al más nuevo (ver CobroModal más abajo).
   const fiadosAbiertos = useMemo(
     () => historial.filter((v) => v.es_fiado && !v.pagado).sort((a, b) => new Date(a.fecha) - new Date(b.fecha)),
     [historial]
+  );
+
+  // Para MOSTRAR en la pantalla del cliente, al revés: el más nuevo
+  // arriba. No se usa para cobrar, solo para la lista visual.
+  const fiadosAbiertosRecientes = useMemo(
+    () => [...fiadosAbiertos].reverse(),
+    [fiadosAbiertos]
   );
 
   const litrosTotales = useMemo(
@@ -188,6 +218,15 @@ export function Clientes() {
             >
               Solo los que deben
             </button>
+            
+            <div className="segmentado" style={{ marginBottom: 10, maxWidth: 260 }}>
+              <button className={!ordenAntiguedad ? 'activo' : ''} onClick={() => setOrdenAntiguedad(false)}>
+                Por monto
+              </button>
+              <button className={ordenAntiguedad ? 'activo' : ''} onClick={() => setOrdenAntiguedad(true)}>
+                Por antigüedad
+              </button>
+            </div>
 
             {cargando ? (
               <div className="vacio">Cargando…</div>
@@ -211,6 +250,11 @@ export function Clientes() {
                         {c.fiados_abiertos > 0
                           ? `${c.fiados_abiertos} ${c.fiados_abiertos === 1 ? 'fiado abierto' : 'fiados abiertos'}`
                           : c.total_compras > 0 ? `${c.total_compras} compras` : 'sin compras'}
+                        {fechaMasViejaPorCliente.has(c.id) && (
+                          <span style={{ color: diasDesde(fechaMasViejaPorCliente.get(c.id)) >= DEUDA_VIEJA_DIAS ? 'var(--danger)' : 'inherit' }}>
+                            {' · hace ' + diasDesde(fechaMasViejaPorCliente.get(c.id)) + ' días'}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {c.debe > 0.5 && (
@@ -298,7 +342,7 @@ export function Clientes() {
               <>
                 <h3 className="titulo-seccion" style={{ marginBottom: 9 }}>Fiados abiertos</h3>
                 <div className="lista-tarjetas" style={{ marginBottom: 18, gap: 7 }}>
-                  {fiadosAbiertos.map((v) => (
+                  {fiadosAbiertosRecientes.map((v) => (
                     <div key={v.id} className="venta-tarjeta">
                       <div className="fila">
                         <div style={{ minWidth: 0 }}>

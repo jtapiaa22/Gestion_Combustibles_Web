@@ -61,6 +61,8 @@ export const diaDe = (iso) =>
 
 /** ¿Este instante cae hoy, según el calendario argentino? */
 export const esHoy = (iso) => diaDe(iso) === hoyAR();
+/** Dias completos que pasaron desde ese instante hasta hoy, en Argentina */
+export const diasDesde = (iso) => Math.floor((new Date(hoyAR()) - new Date(diaDe(iso))) / 86400000);
 
 // ── Plata ───────────────────────────────────────────────────
 
