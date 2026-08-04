@@ -291,7 +291,7 @@ export function Ventas() {
               {['Efectivo', 'Transferencia', 'Fiado'].map((c) => (
                 <button
                   key={c}
-                  data-tono={c === 'Fiado' ? 'fiado' : undefined}
+                  data-tono={c === 'Efectivo' ? 'efectivo' : c === 'Transferencia' ? 'transferencia' : 'fiado'}
                   className={form.cobro === c ? 'activo' : ''}
                   onClick={() => set({ cobro: c, clienteId: null, titularTransferencia: '', dividido: false })}
                 >

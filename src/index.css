@@ -228,6 +228,8 @@ select option { background-color: var(--surface); color: var(--text); }
   box-shadow: var(--shadow);
 }
 .segmentado button.activo[data-tono="fiado"] { color: var(--accent-dark); }
+.segmentado button.activo[data-tono="efectivo"] { color: var(--success); }
+.segmentado button.activo[data-tono="transferencia"] { color: var(--blue); }
 
 /* Selector de combustible: crece con el catálogo sin rediseñarse */
 .grilla-combustibles {
